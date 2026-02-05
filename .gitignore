@@ -27,3 +27,8 @@ migrate_working_dir/
 **/doc/api/
 .dart_tool/
 build/
+
+# Keep example screenshots tracked/published
+!example/flutter_01.png
+!example/flutter_02.png
+!example/flutter_03.png

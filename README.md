@@ -1,44 +1,73 @@
 # gromore_flutter
-## 持续更新
-GroMore Flutter 插件（Android/iOS，聚合/Pangle）。
 
-## 功能概览
+<div align="center">
+【♻️ 持续更新】一款优质的 GroMore 聚合 Flutter 广告插件，支持多广告类型、事件回调与多 ADN 配置。
 
-- 支持广告类型：✅开屏、✅插屏、✅全屏视频、✅Banner、✅激励视频、✅信息流（模板/自渲染可选）、✅Draw 信息流
-- 多端 AppId/AppName 配置：当前平台缺失会初始化失败，非当前平台会返回 `skipped`
-- 日志系统：Debug 默认开启，Release 默认关闭，可手动开关；支持日志级别与日志回调
-- 预留 nativeOptions/invokeNative 兜底能力，覆盖平台差异
-- 示例工程：每种广告类型一个页面，支持输入真实 appId/代码位
+![pub](https://img.shields.io/pub/v/gromore_flutter?label=pub&color=blue)
+![platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS-4CAF50)
+![license](https://img.shields.io/badge/license-MIT-9C27B0)
+![repo](https://img.shields.io/badge/github-xia--sean%2Fgromore__flutter-black)
 
-## 架构
+<br/>
+<img src="https://raw.githubusercontent.com/xia-sean/gromore_flutter/main/doc/images/wechat_qr.png" width="120" alt="微信二维码" />
+<br/>
+<br/>
+
+邮箱📬 xm_sean@163.com
+
+</div>
+
+## 🚀 核心功能
+
+- ✅开屏广告
+- ✅插屏广告 
+- ✅全屏视频
+- ✅Banner
+- ✅激励视频
+- ✅信息流（模板/自渲染可选）
+- ✅Draw 信息流
+- 🏆多端 AppId/AppName 配置：当前平台缺失会初始化失败，非当前平台会返回 `skipped`
+- 🏆日志系统：Debug 默认开启，Release 默认关闭，可手动开关；支持日志级别与日志回调
+- 🏆预留 nativeOptions/invokeNative 兜底能力，覆盖平台差异
+- 🏆示例工程：每种广告类型一个页面，支持输入真实 appId/代码位
+- 🏆文档清晰完整，方法简单
+
+## 📡 示例截图
+
+<div align="center">
+  <img src="https://raw.githubusercontent.com/xia-sean/gromore_flutter/main/doc/images/1.jpg" width="19%" />
+  <img src="https://raw.githubusercontent.com/xia-sean/gromore_flutter/main/doc/images/2.jpg" width="19%" />
+  <img src="https://raw.githubusercontent.com/xia-sean/gromore_flutter/main/doc/images/3.jpg" width="19%" />
+  <img src="https://raw.githubusercontent.com/xia-sean/gromore_flutter/main/doc/images/4.jpg" width="19%" />
+  <img src="https://raw.githubusercontent.com/xia-sean/gromore_flutter/main/doc/images/5.jpg" width="19%" />
+</div>
+
+## 🏡 架构
 
 - `MethodChannel`：初始化、加载/展示/销毁、日志控制
 - `EventChannel`：广告事件、原生日志
 - Flutter 侧通过 `GromoreFlutter.instance` 使用插件
 
-## 最低系统版本
+## 📱 最低系统版本
 
 - Android：minSdk 24（Android 7.0）
 - iOS：12.0
 
-## 状态
+## 🕐 状态
 当前版本已完成 Flutter 层 API 与原生通道骨架，并完成 GroMore 原生 SDK 接入与广告事件映射。  
 SDK 具体版本见下方“当前内置的官方 SDK 版本”。  
 如需适配官方 SDK 更新，请联系维护者（微信：yiluocheng / 邮箱：xm_sean@163.com）。
 
-## 安装
+## 💻 安装
 
 在你的 Flutter 项目中添加依赖：
 
 ```yaml
 dependencies:
-  gromore_flutter:
-    path: ../gromore_flutter
+  gromore_flutter: ^2.1.2
 ```
 
-> 发布到 pub.dev 后可改为版本号依赖。
-
-## 快速开始（4 步）
+## 🔜 快速开始（4 步）
 1) 添加依赖（见上方安装）。  
 2) 配置平台最小项：Android 权限与 Manifest、iOS Info.plist（如引入其它 ADN，再补各平台专有字段）。  
 3) 初始化（iOS 若需 IDFA，先 `requestATT()`）。  

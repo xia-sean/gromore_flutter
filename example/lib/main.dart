@@ -453,45 +453,44 @@ class _SettingsPageState extends State<SettingsPage> {
         const SizedBox(height: 8),
         const Text('App 配置', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: widget.config.iosAppId,
-                enabled: isIos,
-                decoration: const InputDecoration(labelText: 'iOS AppId'),
+        if (isIos)
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: widget.config.iosAppId,
+                  decoration: const InputDecoration(labelText: 'iOS AppId'),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: widget.config.iosAppName,
-                enabled: isIos,
-                decoration: const InputDecoration(labelText: 'iOS AppName'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: widget.config.iosAppName,
+                  decoration: const InputDecoration(labelText: 'iOS AppName'),
+                ),
               ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: widget.config.androidAppId,
-                enabled: isAndroid,
-                decoration: const InputDecoration(labelText: 'Android AppId'),
+            ],
+          )
+        else if (isAndroid)
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: widget.config.androidAppId,
+                  decoration: const InputDecoration(labelText: 'Android AppId'),
+                ),
               ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: widget.config.androidAppName,
-                enabled: isAndroid,
-                decoration: const InputDecoration(labelText: 'Android AppName'),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: widget.config.androidAppName,
+                  decoration: const InputDecoration(labelText: 'Android AppName'),
+                ),
               ),
-            ),
-          ],
-        ),
+            ],
+          )
+        else
+          const Text('当前平台不支持 App 配置'),
         const SizedBox(height: 16),
         _CompactSwitchRow(
           title: 'Debug 模式',

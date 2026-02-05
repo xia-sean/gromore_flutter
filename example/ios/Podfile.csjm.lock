@@ -1,0 +1,80 @@
+---
+IS_LOAD_PLUGIN: true
+PLUGIN_VERSION: 0.0.19
+GLOBAL_NOTE:
+  AUTO_LOAD: false
+  AUTO_UPDATE: not_update
+  LOAD_DETECT: false
+  AUTO_LOAD_WHITELIST: {}
+TARGET_INFO:
+  T-Pods-Runner:
+    LABEL: T-Pods-Runner
+    IS_RELEASE_TARGET: false
+    GM_INFO:
+      NAME: Ads-CN-Beta/CSJMediation
+      VERSION: 7.4.0.3
+    NOTES_INFO:
+      GDTMobSDK:
+        ADN_NAME: GDTMobSDK
+        ADN_VERSION: 4.15.65
+        ADAPTER_NAME: GMGdtAdapter-Beta
+        ADAPTER_ORIGINAL_VERSION: 4.15.65.0
+        ADAPTER_EXPECTED_VERSION: ''
+        AUTO_LOAD: false
+        AUTO_UPDATE: not_update
+        LOAD_DETECT: false
+      BaiduMobAdSDK:
+        ADN_NAME: BaiduMobAdSDK
+        ADN_VERSION: '10.02'
+        ADAPTER_NAME: GMBaiduAdapter-Beta
+        ADAPTER_ORIGINAL_VERSION: 10.02.1
+        ADAPTER_EXPECTED_VERSION: ''
+        AUTO_LOAD: false
+        AUTO_UPDATE: not_update
+        LOAD_DETECT: false
+      KSAdSDK:
+        ADN_NAME: KSAdSDK
+        ADN_VERSION: 4.11.20.1
+        ADAPTER_NAME: GMKsAdapter-Beta
+        ADAPTER_ORIGINAL_VERSION: 4.11.20.1.0
+        ADAPTER_EXPECTED_VERSION: ''
+        AUTO_LOAD: false
+        AUTO_UPDATE: not_update
+        LOAD_DETECT: false
+      SigmobAd-iOS:
+        ADN_NAME: SigmobAd-iOS
+        ADN_VERSION: 4.20.5
+        ADAPTER_NAME: GMSigmobAdapter-Beta
+        ADAPTER_ORIGINAL_VERSION: 4.20.5.0
+        ADAPTER_EXPECTED_VERSION: ''
+        AUTO_LOAD: false
+        AUTO_UPDATE: not_update
+        LOAD_DETECT: false
+      MintegralAdSDK:
+        ADN_NAME: MintegralAdSDK
+        ADN_VERSION:
+        ADAPTER_NAME: GMMintegralAdapter-Beta
+        ADAPTER_ORIGINAL_VERSION: 7.7.7.1
+        ADAPTER_EXPECTED_VERSION: ''
+        AUTO_LOAD: false
+        AUTO_UPDATE: not_update
+        LOAD_DETECT: false
+      Google-Mobile-Ads-SDK:
+        ADN_NAME: Google-Mobile-Ads-SDK
+        ADN_VERSION: 10.0.0
+        ADAPTER_NAME: GMAdmobAdapter-Beta
+        ADAPTER_ORIGINAL_VERSION: 10.0.0.1
+        ADAPTER_EXPECTED_VERSION: ''
+        AUTO_LOAD: false
+        AUTO_UPDATE: not_update
+        LOAD_DETECT: false
+      UnityAds:
+        ADN_NAME: UnityAds
+        ADN_VERSION: 4.3.0
+        ADAPTER_NAME: GMUnityAdapter-Beta
+        ADAPTER_ORIGINAL_VERSION: 4.3.0.1
+        ADAPTER_EXPECTED_VERSION: ''
+        AUTO_LOAD: false
+        AUTO_UPDATE: not_update
+        LOAD_DETECT: false
+RECODER_CHECKSUM: aa05c919308f768058b428137d58e9401ffa7325

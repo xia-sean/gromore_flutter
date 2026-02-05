@@ -1,0 +1,91 @@
+PODS:
+  - Ads-CN-Beta (7.4.0.3):
+    - Ads-CN-Beta/BUAdLive-Framework (= 7.4.0.3)
+    - Ads-CN-Beta/BUAdSDK (= 7.4.0.3)
+  - Ads-CN-Beta/BUAdLive (7.4.0.3)
+  - Ads-CN-Beta/BUAdLive-Framework (7.4.0.3):
+    - Ads-CN-Beta/BUAdLive
+    - BUTTSDKFramework/LivePull-Lite (= 1.48.2.3-premium)
+  - Ads-CN-Beta/BUAdSDK (7.4.0.3)
+  - Ads-CN-Beta/CSJMediation (7.4.0.3):
+    - Ads-CN-Beta/BUAdLive-Framework
+    - Ads-CN-Beta/CSJMediation-Only
+  - Ads-CN-Beta/CSJMediation-Only (7.4.0.3):
+    - Ads-CN-Beta/BUAdSDK
+  - BUTTSDKFramework/Core (1.48.2.3-premium)
+  - BUTTSDKFramework/LiveBase (1.48.2.3-premium):
+    - BUTTSDKFramework/Core
+    - BUTTSDKFramework/Reachability
+  - BUTTSDKFramework/LivePlayer/Base (1.48.2.3-premium):
+    - BUTTSDKFramework/Core
+    - BUTTSDKFramework/LiveBase
+    - BUTTSDKFramework/LivePull-VolcLog
+    - BUTTSDKFramework/Reachability
+  - BUTTSDKFramework/LivePlayer/Lite (1.48.2.3-premium):
+    - BUTTSDKFramework/LivePlayer/Base
+    - BUTTSDKFramework/PlayerCore/LiveLite
+  - BUTTSDKFramework/LivePull-Lite (1.48.2.3-premium):
+    - BUTTSDKFramework/LivePlayer/Lite
+    - BUTTSDKFramework/Strategy/Lite
+  - BUTTSDKFramework/LivePull-VolcLog (1.48.2.3-premium):
+    - BUTTSDKFramework/VolcLog
+  - BUTTSDKFramework/PlayerCore/Base (1.48.2.3-premium):
+    - BUTTSDKFramework/Core
+  - BUTTSDKFramework/PlayerCore/LiveLite (1.48.2.3-premium):
+    - BUTTSDKFramework/PlayerCore/Base
+    - BUTTSDKFramework/TTFFmpeg/LiveLite
+  - BUTTSDKFramework/Reachability (1.48.2.3-premium)
+  - BUTTSDKFramework/Strategy/Core (1.48.2.3-premium):
+    - BUTTSDKFramework/LiveBase
+    - BUTTSDKFramework/Reachability
+  - BUTTSDKFramework/Strategy/Lite (1.48.2.3-premium):
+    - BUTTSDKFramework/LivePlayer/Lite
+    - BUTTSDKFramework/Strategy/Core
+  - BUTTSDKFramework/TTFFmpeg/LiveLite (1.48.2.3-premium)
+  - BUTTSDKFramework/VolcLog (1.48.2.3-premium)
+  - Flutter (1.0.0)
+  - gromore_flutter (0.0.1):
+    - Ads-CN-Beta (= 7.4.0.3)
+    - Flutter
+    - gromore_flutter/BUAdSDK (= 0.0.1)
+    - gromore_flutter/CSJMediation (= 0.0.1)
+  - gromore_flutter/BUAdSDK (0.0.1):
+    - Ads-CN-Beta (= 7.4.0.3)
+    - Ads-CN-Beta/BUAdSDK (= 7.4.0.3)
+    - Flutter
+  - gromore_flutter/CSJMediation (0.0.1):
+    - Ads-CN-Beta (= 7.4.0.3)
+    - Ads-CN-Beta/CSJMediation (= 7.4.0.3)
+    - Flutter
+  - integration_test (0.0.1):
+    - Flutter
+
+DEPENDENCIES:
+  - Ads-CN-Beta/CSJMediation (= 7.4.0.3)
+  - Flutter (from `Flutter`)
+  - gromore_flutter (from `.symlinks/plugins/gromore_flutter/ios`)
+  - integration_test (from `.symlinks/plugins/integration_test/ios`)
+
+SPEC REPOS:
+  trunk:
+    - Ads-CN-Beta
+    - BUTTSDKFramework
+
+EXTERNAL SOURCES:
+  Flutter:
+    :path: Flutter
+  gromore_flutter:
+    :path: ".symlinks/plugins/gromore_flutter/ios"
+  integration_test:
+    :path: ".symlinks/plugins/integration_test/ios"
+
+SPEC CHECKSUMS:
+  Ads-CN-Beta: 3d48154ff1deab9c5fa10551e6f95361292ca96b
+  BUTTSDKFramework: 34f8f8d541da07e79e9c479eb71336d1e4d90fdd
+  Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
+  gromore_flutter: e51ab4534e83a2e910c670387d42e5af30a9507c
+  integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
+
+PODFILE CHECKSUM: 3b8d05f40a01b4ed999dd98f39c2b3ca1378a575
+
+COCOAPODS: 1.16.2

@@ -1,0 +1,121 @@
+group = "com.gromore.flutter"
+version = "1.0-SNAPSHOT"
+
+buildscript {
+    ext.kotlin_version = "1.8.22"
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath("com.android.tools.build:gradle:8.1.0")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version")
+    }
+}
+
+allprojects {
+    repositories {
+        maven {
+            url "https://artifact.bytedance.com/repository/pangle"
+        }
+        google()
+        mavenCentral()
+    }
+}
+
+apply plugin: "com.android.library"
+apply plugin: "kotlin-android"
+
+android {
+    if (project.android.hasProperty("namespace")) {
+        namespace = "com.gromore.flutter"
+    }
+
+    compileSdk = 34
+
+    buildFeatures {
+        // 确保 library module 生成 BuildConfig，供 Debug 判断使用
+        buildConfig = true
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_1_8
+        targetCompatibility = JavaVersion.VERSION_1_8
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8
+    }
+
+    sourceSets {
+        main.java.srcDirs += "src/main/kotlin"
+        test.java.srcDirs += "src/test/kotlin"
+    }
+
+    defaultConfig {
+        minSdk = 24
+    }
+
+    def GM_AVAILABLE_ADNS = ["gdt", "baidu", "ks", "sigmob", "admob"]
+    def GM_ADNS_RAW = (project.findProperty("GM_ADNS")
+            ?: System.getenv("GM_ADNS")
+            ?: "none").toString().trim().toLowerCase()
+    def GM_ADNS = []
+    if (GM_ADNS_RAW == "" || GM_ADNS_RAW == "all") {
+        GM_ADNS = GM_AVAILABLE_ADNS
+    } else if (GM_ADNS_RAW == "none") {
+        GM_ADNS = []
+    } else {
+        GM_ADNS = GM_ADNS_RAW.split(",")
+            .collect { it.trim() }
+            .findAll { it }
+    }
+    GM_ADNS = GM_ADNS.intersect(GM_AVAILABLE_ADNS)
+
+    dependencies {
+        // GroMore 核心 SDK（官方 Maven）
+        implementation("com.pangle_beta.cn:mediation-sdk:7.4.0.7")
+        // GroMore 适配器（按 GM_ADNS 选择）
+        if (GM_ADNS.contains("gdt")) {
+            implementation("com.pangle_beta.cn:mediation-gdt-adapter:4.662.1532.0")
+        }
+        if (GM_ADNS.contains("baidu")) {
+            implementation("com.pangle_beta.cn:mediation-baidu-adapter:9.423.3")
+        }
+        if (GM_ADNS.contains("ks")) {
+            implementation("com.pangle_beta.cn:mediation-ks-adapter:4.11.20.1.0")
+        }
+        if (GM_ADNS.contains("admob")) {
+            implementation("com.pangle_beta.cn:mediation-admob-adapter:17.2.0.72")
+        }
+        if (GM_ADNS.contains("sigmob")) {
+            implementation("com.pangle_beta.cn:mediation-sigmob-adapter:4.25.2.0")
+        }
+
+        // GroMore 测试工具（Debug 专用）
+        debugImplementation("com.pangle_beta.cn:mediation-test-tools:7.4.0.7")
+        // 测试工具资源依赖（statusBarBackground 等）
+        debugImplementation("androidx.coordinatorlayout:coordinatorlayout:1.2.0")
+        // 编译期占位，避免 Release 编译缺失类
+        compileOnly("com.pangle_beta.cn:mediation-test-tools:7.4.0.7")
+
+        // OkHttp（SDK 依赖）
+        implementation("com.squareup.okhttp3:okhttp:3.12.1")
+
+        testImplementation("org.jetbrains.kotlin:kotlin-test")
+        testImplementation("org.mockito:mockito-core:5.0.0")
+    }
+
+    testOptions {
+        unitTests.all {
+            useJUnitPlatform()
+
+            testLogging {
+               events "passed", "skipped", "failed", "standardOut", "standardError"
+               outputs.upToDateWhen {false}
+               showStandardStreams = true
+            }
+        }
+    }
+}

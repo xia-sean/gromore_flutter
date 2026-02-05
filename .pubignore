@@ -1,0 +1,33 @@
+# Flutter/Dart
+.dart_tool/
+.metadata
+build/
+**/build/
+.packages
+.pub-cache/
+.pub/
+pubspec.lock
+
+# IDE
+.idea/
+*.iml
+
+# iOS/Android generated
+**/Pods/
+**/.symlinks/
+**/Flutter/Generated.xcconfig
+**/Flutter/flutter_export_environment.sh
+**/Flutter/App.framework
+**/Flutter/Flutter.framework
+**/Flutter/engine
+**/Flutter/Flutter.podspec
+**/Flutter/Flutter.podspec.json
+**/Flutter/Flutter.xcframework
+
+# Example artifacts
+example/ios/Runner.xcworkspace/
+example/ios/Podfile.lock
+example/ios/Pods/
+
+# Logs
+*.log

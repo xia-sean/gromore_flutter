@@ -1,0 +1,140 @@
+# Uncomment this line to define a global platform for your project
+
+platform :ios, '12.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+# GroMore iOS 依赖配置（官方推荐 / 固定版本）
+GM_AVAILABLE_ADNS = %w[gdt baidu ks sigmob mtg admob unity].freeze
+# 示例工程默认不引入其它 ADN（仅 GroMore 核心），如需可通过 GM_ADNS 指定
+GM_DEFAULT_ADNS = [].freeze
+GM_MODE = (ENV['GM_MODE'] || 'fixed').strip.downcase
+# 兼容一键降级：CSJM_DISABLE_REMOTE=1 视为 fixed
+GM_MODE = 'fixed' if ENV['CSJM_DISABLE_REMOTE'] == '1'
+GM_ADNS_RAW = (ENV['GM_ADNS'] || '').strip.downcase
+GM_ADNS = if GM_ADNS_RAW.empty? || GM_ADNS_RAW == 'none'
+            GM_DEFAULT_ADNS.dup
+          elsif GM_ADNS_RAW == 'all'
+            GM_AVAILABLE_ADNS.dup
+          else
+            GM_ADNS_RAW.split(',').map { |item| item.strip.downcase }.reject(&:empty?)
+          end
+GM_ADNS &= GM_AVAILABLE_ADNS
+
+ADN_SDKS = {
+  'gdt' => { pod: 'GDTMobSDK', version: '4.15.65' },
+  'baidu' => { pod: 'BaiduMobAdSDK', version: '10.02' },
+  'ks' => { pod: 'KSAdSDK', version: '4.11.20.1' },
+  'sigmob' => { pod: 'SigmobAd-iOS', version: '4.20.5' },
+  'mtg' => {
+    pod: 'MintegralAdSDK',
+    version: '7.7.7',
+    subspecs: %w[
+      SplashAd
+      NewInterstitialAd
+      InterstitialVideoAd
+      RewardVideoAd
+      NativeAd
+      NativeAdvancedAd
+      BannerAd
+      BidNativeAd
+      BidNewInterstitialAd
+      BidInterstitialVideoAd
+      BidRewardVideoAd
+    ],
+  },
+  'admob' => { pod: 'Google-Mobile-Ads-SDK', version: '10.0.0' },
+  'unity' => { pod: 'UnityAds', version: '4.3.0' },
+}.freeze
+
+ADAPTERS_BETA = {
+  'gdt' => { pod: 'GMGdtAdapter-Beta', version: '4.15.65.0' },
+  'baidu' => { pod: 'GMBaiduAdapter-Beta', version: '10.02.1' },
+  'ks' => { pod: 'GMKsAdapter-Beta', version: '4.11.20.1.0' },
+  'sigmob' => { pod: 'GMSigmobAdapter-Beta', version: '4.20.5.0' },
+  'mtg' => { pod: 'GMMintegralAdapter-Beta', version: '7.7.7.1' },
+  'admob' => { pod: 'GMAdmobAdapter-Beta', version: '10.0.0.1' },
+  'unity' => { pod: 'GMUnityAdapter-Beta', version: '4.3.0.1' },
+}.freeze
+
+def pod_with_optional_subspecs(name, version, subspecs)
+  if subspecs && subspecs.any?
+    pod name, version, :subspecs => subspecs
+  else
+    pod name, version
+  end
+end
+
+if GM_MODE == 'official'
+  # GroMore Adapter 自动管理插件（官方推荐版本）
+  plugin 'cocoapods-byte-csjm'
+  use_gm_adapter_update!(
+    gm_auto_load: true,
+    gm_auto_update: 'last_stable',
+    gm_load_detect: false,
+    auto_load_whitelist: GM_ADNS.map { |key| ADN_SDKS[key][:pod] },
+  )
+end
+
+project 'Runner', {
+  'Debug' => :debug,
+  'Profile' => :release,
+  'Release' => :release,
+}
+
+def flutter_root
+  generated_xcode_build_settings_path = File.expand_path(File.join('..', 'Flutter', 'Generated.xcconfig'), __FILE__)
+  unless File.exist?(generated_xcode_build_settings_path)
+    raise "#{generated_xcode_build_settings_path} must exist. If you're running pod install manually, make sure flutter pub get is executed first"
+  end
+
+  File.foreach(generated_xcode_build_settings_path) do |line|
+    matches = line.match(/FLUTTER_ROOT\=(.*)/)
+    return matches[1].strip if matches
+  end
+  raise "FLUTTER_ROOT not found in #{generated_xcode_build_settings_path}. Try deleting Generated.xcconfig, then run flutter pub get"
+end
+
+require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), flutter_root)
+
+flutter_ios_podfile_setup
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  # GroMore iOS 融合 SDK（CSJMediation）
+  pod 'Ads-CN-Beta', '7.4.0.3', :subspecs => ['CSJMediation']
+  # 引入使用到的 ADN SDK（按官方建议版本）
+  GM_ADNS.each do |key|
+    info = ADN_SDKS[key]
+    next unless info
+    pod_with_optional_subspecs(info[:pod], info[:version], info[:subspecs])
+  end
+
+  # 固定版本模式：显式引入 Adapter
+  if GM_MODE == 'fixed'
+    GM_ADNS.each do |key|
+      info = ADAPTERS_BETA[key]
+      next unless info
+      pod info[:pod], info[:version]
+    end
+  end
+
+  # 如需线上构建 target 固定 adapter 版本，可在 Release target 中加入：
+  # target 'YOUR_RELEASE_TARGET' do
+  #   gm_release_target!
+  # end
+
+  flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+  target 'RunnerTests' do
+    inherit! :search_paths
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
+  end
+end

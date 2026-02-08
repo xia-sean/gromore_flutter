@@ -1,6 +1,7 @@
-# gromore_flutter
-
 <div align="center">
+
+# 📱 Flutter GroMore Ads
+
 【♻️ 持续更新】一款优质的 GroMore 聚合 Flutter 广告插件，支持多广告类型、事件回调与多 ADN 配置。
 
 ![pub](https://img.shields.io/pub/v/gromore_flutter?label=pub&color=blue)
@@ -20,7 +21,7 @@
 ## 🚀 核心功能
 
 - ✅开屏广告
-- ✅插屏广告 
+- ✅插屏广告
 - ✅全屏视频
 - ✅Banner
 - ✅激励视频
@@ -54,6 +55,7 @@
 - iOS：12.0
 
 ## 🕐 状态
+
 当前版本已完成 Flutter 层 API 与原生通道骨架，并完成 GroMore 原生 SDK 接入与广告事件映射。  
 SDK 具体版本见下方“当前内置的官方 SDK 版本”。  
 如需适配官方 SDK 更新，请联系维护者（微信：yiluocheng / 邮箱：xm_sean@163.com）。
@@ -68,12 +70,13 @@ dependencies:
 ```
 
 ## 🔜 快速开始（4 步）
-1) 添加依赖（见上方安装）。  
-2) 配置平台最小项：Android 权限与 Manifest、iOS Info.plist（如引入其它 ADN，再补各平台专有字段）。  
-3) 初始化（iOS 若需 IDFA，先 `requestATT()`）。  
-4) 加载并展示广告（见下方“广告加载与展示”）。
 
-## Android/iOS 依赖说明（官方 Maven/Pod）
+1. 添加依赖（见上方安装）。
+2. 配置平台最小项：Android 权限与 Manifest、iOS Info.plist（如引入其它 ADN，再补各平台专有字段）。
+3. 初始化（iOS 若需 IDFA，先 `requestATT()`）。
+4. 加载并展示广告（见下方“广告加载与展示”）。
+
+## 🔗 Android/iOS 依赖说明（官方 Maven/Pod）
 
 本插件已按官方 Maven/Pod 接入 GroMore SDK（以官方文档为准，可按需调整版本）。
 
@@ -82,25 +85,28 @@ dependencies:
 
 Android 端默认不引入任何 Adapter（仅 GroMore 核心）；可通过 `GM_ADNS` 控制接入平台。
 
-## 当前内置的官方 SDK 版本
+## 📦 当前内置的官方 SDK 版本
 
 以下版本来自插件工程内置依赖（如需调整可修改对应文件）：
 
 **iOS（Pod）**
+
 - GroMore 核心：`Ads-CN-Beta 7.4.0.3`（含 `BUAdSDK/CSJMediation`）
 
 **Android（Maven）**
+
 - GroMore 核心：`com.pangle_beta.cn:mediation-sdk:7.4.0.7`
 - 测试工具（Debug）：`com.pangle_beta.cn:mediation-test-tools:7.4.0.7`
 
 **Android（已固定的 Adapter 版本）**
+
 - GDT：`com.pangle_beta.cn:mediation-gdt-adapter:4.662.1532.0`
 - 百度：`com.pangle_beta.cn:mediation-baidu-adapter:9.423.3`
 - 快手：`com.pangle_beta.cn:mediation-ks-adapter:4.11.20.1.0`
 - AdMob：`com.pangle_beta.cn:mediation-admob-adapter:17.2.0.72`
 - Sigmob：`com.pangle_beta.cn:mediation-sigmob-adapter:4.25.2.0`
 
-## Android 需要的权限与 Manifest 配置（请按官方文档与业务需要取舍）
+## 🔐 Android 需要的权限与 Manifest 配置（请按官方文档与业务需要取舍）
 
 以下为示例工程中常见配置，请结合你的隐私合规与业务实际情况取舍：
 
@@ -150,32 +156,41 @@ Manifest 关键配置示例（按需调整）：
 > 混淆（ProGuard/R8）与支持架构请按官方文档配置；示例工程常见支持 `armeabi-v7a`/`arm64-v8a`。
 
 **Android 平台额外必需配置（按所选 ADN）**
+
 - 若启用 AdMob（含 adapter），需在 `AndroidManifest.xml` 添加：
+
 ```xml
 <meta-data
     android:name="com.google.android.gms.ads.APPLICATION_ID"
     android:value="ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy" />
 ```
+
 - 其他平台如有 AppId/AppKey/权限要求，请按对应 SDK 文档补齐；未引入的平台无需配置。
 
 **Android ADN 选择（GM_ADNS）**
-- **默认值**：`GM_ADNS=none`（仅 GroMore 核心，不引入任何 Adapter）。  
+
+- **默认值**：`GM_ADNS=none`（仅 GroMore 核心，不引入任何 Adapter）。
 - **可选值**：`gdt,baidu,ks,sigmob,admob`，`GM_ADNS=all` 表示全量。
 - **配置方式 1：gradle.properties（推荐）**
+
 ```
 GM_ADNS=gdt,baidu
 ```
+
 - **配置方式 2：Gradle 命令行**
+
 ```
 ./gradlew assembleDebug -PGM_ADNS=gdt,baidu
 ```
+
 - **配置方式 3：flutter run 环境变量**
 - **提示**：环境变量必须前置（如 `GM_ADNS=... flutter run`），不能写成 `flutter run GM_ADNS=...`。
+
 ```
 GM_ADNS=gdt,baidu flutter run
 ```
 
-## iOS 需要的 Info.plist 配置（请按官方文档与业务需要取舍）
+## 🍎 iOS 需要的 Info.plist 配置（请按官方文档与业务需要取舍）
 
 以下为示例工程中常见配置，请结合你的隐私合规与业务实际情况取舍：
 
@@ -189,24 +204,27 @@ GM_ADNS=gdt,baidu flutter run
 > 若接入多家 ADN（如广点通/快手/百度等），请按对应 SDK 文档补充相关 `Info.plist` 与系统能力配置。
 
 **最小配置说明**
+
 - 仅使用 GroMore 核心时，不需要额外第三方平台（ADN）的 AppId/AppKey/专有字段。
 - 只要引入某个平台 SDK/Adapter，就必须补齐该平台要求的 `Info.plist`/权限/系统能力配置（例如 AdMob 的 `GADApplicationIdentifier`）。
 - 插件不会自动修改应用侧的 `Info.plist`，这些字段需要接入方手动补充。
 
-## iOS 多 ADN 配置（官方推荐 / 固定版本）
+## 🧩 iOS 多 ADN 配置（官方推荐 / 固定版本）
 
 本插件默认只依赖 GroMore 核心（`Ads-CN-Beta/CSJMediation`）。要启用多平台竞价/加载，需要额外引入各 ADN SDK + Adapter。
 
 我们提供两种模式，`官方推荐模式` 和 `固定版本模式`（在你业务工程iOS的 `Podfile` 中配置）：
 
-**注意事项**  
-- 官方推荐模式依赖远端接口，网络受限时可能卡住；可用固定版本模式降级。  
-- 使用官方推荐模式前需安装插件：`sudo gem install cocoapods-byte-csjm`。  
-- 也可用 `CSJM_DISABLE_REMOTE=1` 一键降级（等同 `GM_MODE=fixed`）。  
-- 若包含 AdMob（`admob`），iOS 必须在 `Info.plist` 配置 `GADApplicationIdentifier`，否则会直接崩溃。  
+**注意事项**
+
+- 官方推荐模式依赖远端接口，网络受限时可能卡住；可用固定版本模式降级。
+- 使用官方推荐模式前需安装插件：`sudo gem install cocoapods-byte-csjm`。
+- 也可用 `CSJM_DISABLE_REMOTE=1` 一键降级（等同 `GM_MODE=fixed`）。
+- 若包含 AdMob（`admob`），iOS 必须在 `Info.plist` 配置 `GADApplicationIdentifier`，否则会直接崩溃。
 - 各平台通常都有自己的 AppId/AppKey/Info.plist/Manifest 要求，请按对应 SDK 文档补齐。
 
 **如何选择（优劣对比）**
+
 - 官方推荐模式（`GM_MODE=official`）
   - **版本含义**：Adapter 版本由官方远端接口推荐并自动匹配。
   - 优点：Adapter 版本与官方后台推荐匹配，兼容性更稳，适配关系更新更快。
@@ -222,14 +240,16 @@ GM_ADNS=gdt,baidu flutter run
 **2) 固定版本模式（默认，离线兜底）**  
 不走远端匹配，直接使用固定的 Adapter 版本。
 
-**ADN 选择（GM_ADNS）**  
-- `GM_ADNS` 为白名单，逗号分隔（如 `gdt,baidu`）。  
-- `GM_ADNS=all` 表示全量（`gdt,baidu,ks,sigmob,mtg,admob,unity`）；`GM_ADNS=none` 表示仅 GroMore 核心。  
-- `GM_ADNS` 为空时取 Podfile 默认值（示例工程默认 `none`）。  
+**ADN 选择（GM_ADNS）**
+
+- `GM_ADNS` 为白名单，逗号分隔（如 `gdt,baidu`）。
+- `GM_ADNS=all` 表示全量（`gdt,baidu,ks,sigmob,mtg,admob,unity`）；`GM_ADNS=none` 表示仅 GroMore 核心。
+- `GM_ADNS` 为空时取 Podfile 默认值（示例工程默认 `none`）。
 - 建议业务工程显式设置 `GM_ADNS`，避免默认值不清晰。
 - **提示**：环境变量必须前置（如 `GM_ADNS=... pod install`），不能写成 `pod install GM_ADNS=...`。
 
 **命令示例**
+
 ```bash
 # 官方推荐：全量（gdt,baidu,ks,sigmob,mtg,admob,unity）
 GM_MODE=official GM_ADNS=all pod install
@@ -244,9 +264,10 @@ GM_MODE=fixed GM_ADNS=none pod install
 GM_MODE=fixed GM_ADNS=admob pod install
 ```
 
-## 初始化（完整示例）
+## 🧰 初始化（完整示例）
 
 **参数说明**
+
 - `androidAppId/androidAppName/iosAppId/iosAppName`：平台 AppId/AppName；当前平台缺失会初始化失败，非当前平台可不填。
 - `debug`：是否调试模式（建议 Debug=true，Release=false）。
 - `useMediation`：是否启用聚合。
@@ -256,9 +277,11 @@ GM_MODE=fixed GM_ADNS=admob pod install
 - `androidOptions/iosOptions`：扩展参数透传给原生（按官方文档/业务需求填写）。
 
 **返回结果**
+
 - `InitResult.android/ios`：分别表示 Android/iOS 的初始化结果；未配置的平台会返回 `skipped`。
 
 **初始化相关方法**
+
 - `requestATT()`：iOS ATT 授权请求（仅 iOS 生效）。
 - `init(config)`：初始化 GroMore。
 - `setLogEnabled(bool)`：动态开关日志。
@@ -312,7 +335,7 @@ if (!result.ios.success) {
 }
 ```
 
-## 日志
+## 📝 日志
 
 - Debug 模式默认开启；Release 默认关闭，可手动控制。
 - 原生日志不会默认重复输出到 Dart 控制台（避免重复），可通过 `setPrintNativeLog(true)` 开启。
@@ -325,11 +348,13 @@ GromoreLogger.setHandler((event) {
 });
 ```
 
-## 查看广告平台来源（ecpmInfo）
+## 🔍 查看广告平台来源（ecpmInfo）
+
 `loaded/shown` 事件会尽力附带 `data.ecpmInfo`，但仅在 SDK 有展示 eCPM 信息时才返回。  
 注意：`loaded` 阶段部分平台可能还拿不到来源，建议以 `shown` 为准；字段也可能为 `null`。
 
 **字段说明（常见字段，实际以平台返回为准）**
+
 - `sdkName`：广告平台/ADN 名称（如 pangle/gdt/baidu/admob 等）。
 - `customSdkName`：自定义平台名称（如有）。
 - `slotId`：平台侧代码位/广告位 ID。
@@ -374,9 +399,9 @@ final subscription = GromoreFlutter.instance.listenAdEvents(
 );
 ```
 
-## 广告加载与展示（示例）
+## 📣 广告加载与展示（示例）
 
-## 1. 事件监听（新事件模型 + 子类事件）
+## 🔔 1. 事件监听（新事件模型 + 子类事件）
 
 推荐使用类型化回调：
 
@@ -404,7 +429,7 @@ GromoreFlutter.instance.adEvents.listen((event) {
 });
 ```
 
-## 2. 类型化 Config + Facade（推荐用法）
+## 🧩 2. 类型化 Config + Facade（推荐用法）
 
 ### 2.1 开屏
 
@@ -490,7 +515,7 @@ final bannerId = await GromoreBanner.load(
 );
 ```
 
-## 3. 视图组件（默认支持可见性/遮挡检测）
+## 🖼️ 3. 视图组件（默认支持可见性/遮挡检测）
 
 ```dart
 GromoreBannerView(
@@ -529,9 +554,9 @@ GromoreBannerView(
 );
 ```
 
-## 4. 资源释放与订阅管理
+## 🧹 4. 资源释放与订阅管理
 
-- 页面/组件销毁时，建议取消事件订阅，避免重复回调与内存泄漏。  
+- 页面/组件销毁时，建议取消事件订阅，避免重复回调与内存泄漏。
 - 广告不再使用时，调用 `dispose`/`disposeAd` 释放资源（尤其是 Banner/信息流类视图广告）。
 
 ```dart
@@ -544,13 +569,13 @@ await GromoreFlutter.instance.disposeAd(adId);
 // await GromoreReward.dispose(adId);
 ```
 
-## 信息流模式说明
+## 🧭 信息流模式说明
 
 - 模板/Express：SDK 返回广告视图，SDK 负责广告 UI 渲染；你将其插入列表/瀑布流。
 - 自渲染/Native：SDK 返回素材数据，自定义布局并注册点击区域。
 - Android 自渲染仅支持历史代码位；如无历史代码位请使用模板信息流。
 
-## 预览工具（Debug）
+## 🧪 预览工具（Debug）
 
 仅 Debug 环境使用，需满足 SDK 版本与白名单要求，且上线前移除相关调试代码。
 
@@ -567,16 +592,18 @@ await GromoreFlutter.instance.invokeNative('openTestTool', {
 });
 ```
 
-## 示例工程
+## 📦 示例工程
 
 `example/` 提供完整 UI：每种广告类型一个页面，可加载/展示/销毁，并展示日志与状态。
 
 步骤：
+
 1. 运行 example
 2. 在「设置」页输入 AppId/AppName
 3. 在对应广告页输入代码位，点击加载/展示
 
 示例默认值（仅用于演示）：
+
 - Android AppId：`5786586`
 - Android 开屏代码位：`103864669`
 - iOS AppId：`5786645`

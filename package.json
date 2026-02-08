@@ -1,0 +1,7 @@
+{
+  "name": "gromore_flutter_tools",
+  "private": true,
+  "scripts": {
+    "pub:publish": "./publish.sh"
+  }
+}

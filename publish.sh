@@ -14,7 +14,7 @@ if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
   exit 1
 fi
 
-read -r -p "请输入本次发版新增内容（多条用 ; 分隔）: " CHANGELOG_ITEMS
+read -r -p "请输入本次发版新增内容（多条用 ;/； 分隔）: " CHANGELOG_ITEMS
 if [[ -z "$CHANGELOG_ITEMS" ]]; then
   echo "发版内容不能为空"
   exit 1
@@ -30,7 +30,7 @@ from pathlib import Path
 version = sys.argv[1]
 root = Path(".")
 changelog_raw = os.environ.get("CHANGELOG_ITEMS", "").strip()
-items = [s.strip().lstrip("- ").strip() for s in re.split(r"[;；\n]+", changelog_raw) if s.strip()]
+items = [s.strip().lstrip("- ").strip() for s in re.split(r"\s*[;；]\s*", changelog_raw) if s.strip()]
 if not items:
     sys.exit("发版内容不能为空")
 
@@ -108,9 +108,20 @@ flutter pub publish --server https://pub.dev
 # 发布成功后自动提交并推送到 GitHub
 if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   if [[ -n "$(git status --porcelain)" ]]; then
+    echo "即将提交以下文件："
+    git status --short
+    echo "如需终止提交，请现在按 Ctrl+C"
     git add -A
     COMMIT_TITLE="release: v${VERSION}"
-    COMMIT_BODY="$(printf '%s\n' "${CHANGELOG_ITEMS}" | tr ';' '\n' | sed -e 's/^[[:space:]]*//;s/[[:space:]]*$//' -e '/^$/d' | sed 's/^/- /')"
+    COMMIT_BODY="$(python3 - <<'PY'
+import os
+import re
+
+raw = os.environ.get("CHANGELOG_ITEMS", "")
+items = [s.strip().lstrip("- ").strip() for s in re.split(r"\s*[;；]\s*", raw) if s.strip()]
+print("\n".join(f"- {item}" for item in items))
+PY
+    )"
     if [[ -n "$COMMIT_BODY" ]]; then
       git commit -m "$COMMIT_TITLE" -m "$COMMIT_BODY"
     else

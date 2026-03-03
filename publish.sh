@@ -60,7 +60,7 @@ update_file(
 update_file(
     root / "ios" / "gromore_flutter.podspec",
     r"^(\s*s\.version\s*=\s*)['\"][^'\"]+['\"]",
-    rf"\\1'{version}'",
+    rf"\1'{version}'",
     flags=re.M,
     required=True,
 )

@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'gromore_flutter'
-\1'2.1.3'
+  s.version          = '2.1.4'
   s.summary          = 'GroMore Flutter plugin for Android/iOS.'
   s.description      = <<-DESC
 GroMore Flutter plugin for Android/iOS (Pangle mediation).

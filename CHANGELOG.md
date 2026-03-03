@@ -1,22 +1,27 @@
+## 2.1.4
+
+- 修复已知bug
+
 ## 2.1.3
 
-- 优化插件 修复已知Bug
+- Improve plugin stability.
+- Fix known issues.
 
 ## 2.1.1
 
-- README 顶部加入二维码与示例截图
-- 示例工程设置页仅展示当前平台配置
+- Add QR code and screenshots to documentation.
+- Show only current platform settings in the example app.
 
 ## 2.1.0
 
-- 首个公开版本
-- 支持开屏、插屏、全屏视频、激励视频、信息流、Draw 信息流、Banner
-- 初始化、加载/展示/销毁与事件回调
-- iOS/Android 多 ADN 配置说明与示例工程
+- First public release.
+- Support splash, interstitial, fullscreen video, rewarded video, feed, draw feed, and banner ads.
+- Add initialization, load/show/dispose APIs, and event callbacks.
+- Add iOS and Android ADN integration docs and example app.
 
 ## 0.0.1
 
-- 初始化插件工程结构
-- 完成 Dart API 设计与日志系统骨架
-- 增加示例工程（可输入 AppId/代码位）
-- 原生通道骨架（Android/iOS）
+- Initialize plugin project structure.
+- Add Dart API and logging system skeleton.
+- Add example app with appId and placement input.
+- Add Android and iOS method channel skeleton.

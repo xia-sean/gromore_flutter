@@ -66,7 +66,7 @@ SDK 具体版本见下方“当前内置的官方 SDK 版本”。
 
 ```yaml
 dependencies:
-  gromore_flutter: ^2.1.5
+  gromore_flutter: ^2.1.6
 ```
 
 ## 🔜 快速开始（4 步）

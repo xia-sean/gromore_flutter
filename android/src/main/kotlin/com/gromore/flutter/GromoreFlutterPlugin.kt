@@ -5,6 +5,7 @@ import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import com.bytedance.sdk.openadsdk.TTAdConfig
+import com.bytedance.sdk.openadsdk.TTCustomController
 import com.bytedance.sdk.openadsdk.TTAdSdk
 import com.bytedance.tools.util.ToolsUtil
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -225,6 +226,7 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
       .appName(appName)
       .debug(debug)
       .useMediation(useMediation)
+      .customController(buildPrivacyCustomController())
       .build()
 
     val context = applicationContext ?: activity?.applicationContext
@@ -290,6 +292,20 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     val args = call.arguments as? Map<*, *>
     logEnabled = args?.get("enabled") as? Boolean ?: logEnabled
     result.success(null)
+  }
+
+  /**
+   * Android 隐私采集控制：
+   * 通过 mcod=0 禁止设备信息频繁采集。
+   */
+  private fun buildPrivacyCustomController(): TTCustomController {
+    return object : TTCustomController() {
+      override fun userPrivacyConfig(): MutableMap<String, Any> {
+        val map = HashMap<String, Any>()
+        map["mcod"] = "0"
+        return map
+      }
+    }
   }
 
   /**

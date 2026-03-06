@@ -1,6 +1,6 @@
 name: gromore_flutter
-description: Flutter plugin for GroMore ads mediation on Android and iOS with typed APIs, event callbacks, and ad views.
-version: 2.1.5
+description: 【持续更新】一款优质的 GroMore 聚合 Flutter 广告插件，支持多广告类型、事件回调与多 ADN 配置。
+version: 2.1.6
 homepage: https://www.csjplatform.com
 repository: https://github.com/xia-sean/gromore_flutter
 issue_tracker: https://github.com/xia-sean/gromore_flutter/issues

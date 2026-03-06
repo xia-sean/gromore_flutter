@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+trap 'echo "检测到中断，已停止发布流程，不会继续提交/打标签。"; exit 130' INT TERM
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
@@ -12,6 +13,19 @@ fi
 if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
   echo "版本号格式不合法，应为 semver（例如 2.1.3 或 2.1.3+1）"
   exit 1
+fi
+
+TAG_NAME="v${VERSION}"
+if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  if git rev-parse -q --verify "refs/tags/${TAG_NAME}" >/dev/null; then
+    TAG_COMMIT="$(git rev-list -n 1 "${TAG_NAME}")"
+    HEAD_COMMIT="$(git rev-parse HEAD)"
+    echo "检测到本地已存在标签 ${TAG_NAME} -> ${TAG_COMMIT}"
+    if [[ "$TAG_COMMIT" != "$HEAD_COMMIT" ]]; then
+      echo "标签 ${TAG_NAME} 不指向当前提交，建议改用新版本号发布，或先手动处理该标签后重试。"
+      exit 1
+    fi
+  fi
 fi
 
 read -r -p "请输入本次发版新增内容（多条用 ;/； 分隔）: " CHANGELOG_ITEMS
@@ -103,7 +117,64 @@ PY
 export PUB_HOSTED_URL="https://pub.dev"
 export FLUTTER_STORAGE_BASE_URL="https://storage.googleapis.com"
 
-flutter pub publish --server https://pub.dev
+if command -v curl >/dev/null 2>&1; then
+  echo "预检查 Google OAuth 连通性..."
+  if ! curl -sS -o /dev/null --max-time 12 "https://accounts.google.com/o/oauth2/token"; then
+    echo "无法访问 https://accounts.google.com/o/oauth2/token（发布鉴权必需）。"
+    echo "请切换可访问 Google OAuth 的网络或代理后重试。"
+    exit 1
+  fi
+  if ! curl -sS -o /dev/null --max-time 12 "https://oauth2.googleapis.com/token"; then
+    echo "无法访问 https://oauth2.googleapis.com/token（发布鉴权必需）。"
+    echo "请切换可访问 Google OAuth 的网络或代理后重试。"
+    exit 1
+  fi
+fi
+
+flutter pub publish --server https://pub.dev --force
+
+PACKAGE_NAME="$(python3 - <<'PY'
+from pathlib import Path
+import re
+
+text = Path("pubspec.yaml").read_text(encoding="utf-8")
+m = re.search(r"^name:\s*([^\s#]+)\s*$", text, re.M)
+if not m:
+    raise SystemExit("未在 pubspec.yaml 中找到 name")
+print(m.group(1))
+PY
+)"
+
+check_pub_version() {
+  local package="$1"
+  local version="$2"
+  local max_retry="${3:-8}"
+  local sleep_sec="${4:-5}"
+  local i
+
+  for ((i=1; i<=max_retry; i++)); do
+    if curl -fsSL "https://pub.dev/api/packages/${package}" | python3 -c '
+import json
+import sys
+
+target = sys.argv[1]
+data = json.load(sys.stdin)
+versions = {item.get("version") for item in data.get("versions", [])}
+sys.exit(0 if target in versions else 1)
+' "$version"
+    then
+      return 0
+    fi
+    sleep "$sleep_sec"
+  done
+  return 1
+}
+
+echo "校验 pub.dev 是否已出现 ${PACKAGE_NAME} ${VERSION} ..."
+if ! check_pub_version "$PACKAGE_NAME" "$VERSION" 12 5; then
+  echo "未在 pub.dev 检测到 ${PACKAGE_NAME} ${VERSION}，停止后续 git 提交/打标签。"
+  exit 1
+fi
 
 # 发布成功后自动提交并推送到 GitHub
 if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -127,7 +198,17 @@ PY
     else
       git commit -m "$COMMIT_TITLE"
     fi
-    git tag "v${VERSION}"
+    if git rev-parse -q --verify "refs/tags/v${VERSION}" >/dev/null; then
+      EXISTING_TAG_COMMIT="$(git rev-list -n 1 "v${VERSION}")"
+      CURRENT_HEAD_COMMIT="$(git rev-parse HEAD)"
+      if [[ "$EXISTING_TAG_COMMIT" != "$CURRENT_HEAD_COMMIT" ]]; then
+        echo "标签 v${VERSION} 已存在且不指向当前提交，请手动处理后再推送。"
+        exit 1
+      fi
+      echo "标签 v${VERSION} 已存在且指向当前提交，跳过创建标签"
+    else
+      git tag "v${VERSION}"
+    fi
     git push
     git push --tags
   else

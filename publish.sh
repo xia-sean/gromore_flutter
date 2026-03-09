@@ -1,11 +1,36 @@
 #!/usr/bin/env bash
+if [ -z "${BASH_VERSION:-}" ]; then
+  exec bash "$0" "$@"
+fi
 set -euo pipefail
 trap 'echo "检测到中断，已停止发布流程，不会继续提交/打标签。"; exit 130' INT TERM
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-read -r -p "请输入要发布的版本号(例如 2.1.3): " VERSION
+trim_whitespace() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+
+prompt_input() {
+  local prompt="$1"
+  local value=""
+  if ! tty -s || [[ ! -r /dev/tty ]]; then
+    echo "当前环境无可交互终端(/dev/tty)，请在终端中直接执行 ./publish.sh。" >&2
+    exit 1
+  fi
+  if ! IFS= read -r -e -p "$prompt" value < /dev/tty; then
+    echo "读取输入失败，已取消发布。" >&2
+    exit 1
+  fi
+  value="${value//$'\r'/}"
+  printf '%s' "$(trim_whitespace "$value")"
+}
+
+VERSION="$(prompt_input "请输入要发布的版本号(例如 2.1.3): ")"
 if [[ -z "$VERSION" ]]; then
   echo "版本号不能为空"
   exit 1
@@ -28,7 +53,7 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
   fi
 fi
 
-read -r -p "请输入本次发版新增内容（多条用 ;/； 分隔）: " CHANGELOG_ITEMS
+CHANGELOG_ITEMS="$(prompt_input "请输入本次发版新增内容（多条用 ;/； 分隔）: ")"
 if [[ -z "$CHANGELOG_ITEMS" ]]; then
   echo "发版内容不能为空"
   exit 1

@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 
 import 'ad_event.dart';
 import 'ad_request.dart';
@@ -44,6 +46,15 @@ class GromoreFlutter {
   /// 日志事件订阅
   StreamSubscription<dynamic>? _logEventSubscription;
 
+  /// adId -> 广告类型映射（用于展示后续控制）
+  final Map<String, GromoreAdType> _adTypesById = <String, GromoreAdType>{};
+
+  /// 当前处于方向锁定的开屏 adId（仅 iOS）
+  String? _lockedSplashAdId;
+
+  /// 当前是否已执行开屏方向锁定（仅 iOS）
+  bool _isSplashOrientationLocked = false;
+
   /// 广告事件流
   Stream<GromoreAdEvent> get adEvents => _adEventController.stream;
 
@@ -56,6 +67,7 @@ class GromoreFlutter {
         GromoreFlutterPlatform.instance.adEvents.listen((dynamic event) {
       if (event is Map) {
         final adEvent = GromoreAdEvent.fromMap(event);
+        _onAdEvent(adEvent);
         _adEventController.add(adEvent);
       }
     });
@@ -101,14 +113,16 @@ class GromoreFlutter {
       final PlatformInitResult iosResult = _validateIos(config);
       if (!iosResult.success) {
         return InitResult(
-          android: const PlatformInitResult.skipped(reason: 'not_running_on_android'),
+          android: const PlatformInitResult.skipped(
+              reason: 'not_running_on_android'),
           ios: iosResult,
         );
       }
       final PlatformInitResult result =
           await GromoreFlutterPlatform.instance.init(config);
       return InitResult(
-        android: const PlatformInitResult.skipped(reason: 'not_running_on_android'),
+        android:
+            const PlatformInitResult.skipped(reason: 'not_running_on_android'),
         ios: result,
       );
     }
@@ -149,20 +163,59 @@ class GromoreFlutter {
   /// ```
   Future<String> loadAd(GromoreAdType type, GromoreAdRequest request) async {
     _assertAdTypeEnabled(type);
-    return GromoreFlutterPlatform.instance.loadAd(type, request);
+    final shouldLockSplashOrientation =
+        defaultTargetPlatform == TargetPlatform.iOS &&
+            type == GromoreAdType.splash;
+    if (shouldLockSplashOrientation) {
+      await _lockSplashOrientation();
+    }
+    final String adId;
+    try {
+      adId = await GromoreFlutterPlatform.instance.loadAd(type, request);
+    } catch (_) {
+      if (shouldLockSplashOrientation) {
+        await _unlockSplashOrientation();
+      }
+      rethrow;
+    }
+    if (shouldLockSplashOrientation) {
+      await _lockSplashOrientation(adId: adId);
+    }
+    _adTypesById[adId] = type;
+    return adId;
   }
 
   /// 展示广告
   ///
   /// [adId] 广告实例 ID
   Future<void> showAd(String adId) async {
-    return GromoreFlutterPlatform.instance.showAd(adId);
+    final adType = _adTypesById[adId];
+    final shouldLockSplashOrientation =
+        defaultTargetPlatform == TargetPlatform.iOS &&
+            adType == GromoreAdType.splash;
+    if (shouldLockSplashOrientation) {
+      await _lockSplashOrientation(adId: adId);
+    }
+    try {
+      return await GromoreFlutterPlatform.instance.showAd(adId);
+    } catch (_) {
+      if (shouldLockSplashOrientation) {
+        await _unlockSplashOrientation();
+      }
+      rethrow;
+    }
   }
 
   /// 销毁广告
   ///
   /// [adId] 广告实例 ID
   Future<void> disposeAd(String adId) async {
+    final adType = _adTypesById.remove(adId);
+    if (defaultTargetPlatform == TargetPlatform.iOS &&
+        adType == GromoreAdType.splash &&
+        _lockedSplashAdId == adId) {
+      await _unlockSplashOrientation();
+    }
     return GromoreFlutterPlatform.instance.disposeAd(adId);
   }
 
@@ -170,7 +223,8 @@ class GromoreFlutter {
   ///
   /// [method] 原生方法名
   /// [args] 方法参数
-  Future<dynamic> invokeNative(String method, Map<String, dynamic>? args) async {
+  Future<dynamic> invokeNative(
+      String method, Map<String, dynamic>? args) async {
     return GromoreFlutterPlatform.instance.invokeNative(method, args);
   }
 
@@ -197,6 +251,92 @@ class GromoreFlutter {
       final bool typeMatch = adType == null || event.adType == adType;
       return idMatch && typeMatch;
     }).listen(callback.handle);
+  }
+
+  void _onAdEvent(GromoreAdEvent event) {
+    if (_isTerminalAdEvent(event.eventType)) {
+      _adTypesById.remove(event.adId);
+    }
+    final shouldUnlockSplashOrientation =
+        defaultTargetPlatform == TargetPlatform.iOS &&
+            event.adType == GromoreAdType.splash &&
+            event.adId == _lockedSplashAdId &&
+            _isSplashUnlockEvent(event.eventType);
+    if (shouldUnlockSplashOrientation) {
+      _unlockSplashOrientation();
+    }
+  }
+
+  bool _isTerminalAdEvent(GromoreAdEventType eventType) {
+    switch (eventType) {
+      case GromoreAdEventType.failed:
+      case GromoreAdEventType.error:
+      case GromoreAdEventType.closed:
+      case GromoreAdEventType.skipped:
+      case GromoreAdEventType.completed:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  bool _isSplashUnlockEvent(GromoreAdEventType eventType) {
+    switch (eventType) {
+      case GromoreAdEventType.failed:
+      case GromoreAdEventType.error:
+      case GromoreAdEventType.closed:
+      case GromoreAdEventType.skipped:
+      case GromoreAdEventType.completed:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  Future<void> _lockSplashOrientation({String? adId}) async {
+    if (_isSplashOrientationLocked &&
+        adId != null &&
+        _lockedSplashAdId == adId) {
+      await _waitForPortraitOrientation();
+      return;
+    }
+    if (!_isSplashOrientationLocked) {
+      await SystemChrome.setPreferredOrientations(
+        const <DeviceOrientation>[DeviceOrientation.portraitUp],
+      );
+      _isSplashOrientationLocked = true;
+    }
+    if (adId != null) {
+      _lockedSplashAdId = adId;
+    }
+    await _waitForPortraitOrientation();
+  }
+
+  Future<void> _unlockSplashOrientation() async {
+    if (!_isSplashOrientationLocked && _lockedSplashAdId == null) {
+      return;
+    }
+    _lockedSplashAdId = null;
+    _isSplashOrientationLocked = false;
+    await SystemChrome.setPreferredOrientations(const <DeviceOrientation>[]);
+  }
+
+  Future<void> _waitForPortraitOrientation() async {
+    if (defaultTargetPlatform != TargetPlatform.iOS) {
+      return;
+    }
+    final DateTime deadline =
+        DateTime.now().add(const Duration(milliseconds: 1200));
+    while (DateTime.now().isBefore(deadline)) {
+      final views = WidgetsBinding.instance.platformDispatcher.views;
+      final Size size = views.isNotEmpty ? views.first.physicalSize : Size.zero;
+      if (size.width > 0 && size.height > 0 && size.height >= size.width) {
+        await Future<void>.delayed(const Duration(milliseconds: 50));
+        return;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 16));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 80));
   }
 
   /// 校验 Android 初始化参数

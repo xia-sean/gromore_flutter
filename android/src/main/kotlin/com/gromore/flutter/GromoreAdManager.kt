@@ -813,7 +813,7 @@ internal class GromoreAdManager(
   private fun readInt(source: Map<*, *>, key: String, fallback: Int): Int {
     val extra = source["extra"] as? Map<*, *> ?: emptyMap<Any, Any>()
     val androidOptions = source["androidOptions"] as? Map<*, *> ?: emptyMap<Any, Any>()
-    val raw = androidOptions[key] ?: extra[key]
+    val raw = source[key] ?: androidOptions[key] ?: extra[key]
     return when (raw) {
       is Int -> raw
       is Number -> raw.toInt()

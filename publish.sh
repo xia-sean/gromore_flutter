@@ -171,7 +171,9 @@ sys.exit(0 if target in versions else 1)
 }
 
 echo "校验 pub.dev 是否已出现 ${PACKAGE_NAME} ${VERSION} ..."
-if ! check_pub_version "$PACKAGE_NAME" "$VERSION" 12 5; then
+if check_pub_version "$PACKAGE_NAME" "$VERSION" 12 5; then
+  echo "校验通过：pub.dev 已检测到 ${PACKAGE_NAME} ${VERSION}。"
+else
   echo "未在 pub.dev 检测到 ${PACKAGE_NAME} ${VERSION}，停止后续 git 提交/打标签。"
   exit 1
 fi

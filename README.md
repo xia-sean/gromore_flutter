@@ -28,7 +28,7 @@
 - ✅信息流（模板/自渲染可选）
 - ✅Draw 信息流
 - 🏆多端 AppId/AppName 配置：当前平台缺失会初始化失败，非当前平台会返回 `skipped`
-- 🏆日志系统：Debug 默认开启，Release 默认关闭，可手动开关；支持日志级别与日志回调
+- 🏆日志系统：Debug 默认开启，Release 默认关闭，可手动开关；支持日志级别、日志回调、文件落盘与 txt 导出
 - 🏆预留 nativeOptions/invokeNative 兜底能力，覆盖平台差异
 - 🏆示例工程：每种广告类型一个页面，支持输入真实 appId/代码位
 - 🏆文档清晰完整，方法简单
@@ -66,7 +66,7 @@ SDK 具体版本见下方“当前内置的官方 SDK 版本”。
 
 ```yaml
 dependencies:
-  gromore_flutter: ^2.1.7
+  gromore_flutter: ^2.1.8
 ```
 
 ## 🔜 快速开始（4 步）
@@ -91,12 +91,12 @@ Android 端默认不引入任何 Adapter（仅 GroMore 核心）；可通过 `GM
 
 **iOS（Pod）**
 
-- GroMore 核心：`Ads-CN-Beta 7.4.0.3`（含 `BUAdSDK/CSJMediation`）
+- GroMore 核心：`Ads-CN-Beta 7.4.0.1`（含 `BUAdSDK/CSJMediation`）
 
 **Android（Maven）**
 
-- GroMore 核心：`com.pangle_beta.cn:mediation-sdk:7.4.0.7`
-- 测试工具（Debug）：`com.pangle_beta.cn:mediation-test-tools:7.4.0.7`
+- GroMore 核心：`com.pangle_beta.cn:mediation-sdk:7.4.1.4`
+- 测试工具（Debug）：`com.pangle_beta.cn:mediation-test-tools:7.4.1.4`
 
 **Android（已固定的 Adapter 版本）**
 
@@ -272,6 +272,7 @@ GM_MODE=fixed GM_ADNS=admob pod install
 - `debug`：是否调试模式（建议 Debug=true，Release=false）。
 - `useMediation`：是否启用聚合。
 - `enableLog`：日志开关（不传则 Debug 默认开、Release 默认关）。
+- `enableLogToFile`：是否把日志同时写入应用沙盒文件；写入时同样遵循日志级别阈值规则。
 - `enabledAdTypes`：启用的广告类型集合；未启用的类型会在 `loadAd` 时抛出异常。
   - 支持类型：`splash / interstitial / fullscreenVideo / rewardVideo / native / drawNative / banner`
 - `androidOptions/iosOptions`：扩展参数透传给原生（按官方文档/业务需求填写）。
@@ -285,7 +286,13 @@ GM_MODE=fixed GM_ADNS=admob pod install
 - `requestATT()`：iOS ATT 授权请求（仅 iOS 生效）。
 - `init(config)`：初始化 GroMore。
 - `setLogEnabled(bool)`：动态开关日志。
-- `setLogLevel(LogLevel)`：设置日志级别。
+- `setLogFileEnabled(bool)`：动态开关日志文件写入。
+- `setLogLevel(LogLevel)`：设置日志级别阈值，例如 `info` 会记录 `info/warn/error`，`debug` 会记录全部。
+- `getLogFilePath()`：获取当前活跃日志文件路径。
+- `readLogFileContent()`：读取当前日志文件内容。
+- `clearLogFile()`：清空当前日志文件内容。
+- `deleteLogFile()`：删除当前日志文件。
+- `exportLogFile({String? fileName})`：导出当前日志文件并返回 txt 路径。
 - `GromoreLogger.setPrintNativeLog(bool)`：是否把原生日志输出到控制台。
 
 ```dart
@@ -304,6 +311,7 @@ final config = GromoreConfig(
   debug: kDebugMode,
   useMediation: true,
   enableLog: true, // 不传则 Debug 默认开、Release 默认关
+  enableLogToFile: true, // 打开后会持续写入沙盒日志文件
   enabledAdTypes: {
     GromoreAdType.splash,
     GromoreAdType.interstitial,
@@ -323,8 +331,21 @@ final result = await GromoreFlutter.instance.init(config);
 
 // 4) 日志开关/级别（可在 init 前后调用）
 await GromoreFlutter.instance.setLogEnabled(true);
+await GromoreFlutter.instance.setLogFileEnabled(true);
 await GromoreFlutter.instance.setLogLevel(LogLevel.info);
 GromoreLogger.setPrintNativeLog(true);
+
+// 4.1) 导出日志文件（适合接到 App 内调试页面）
+final path = await GromoreFlutter.instance.exportLogFile(
+  fileName: 'gromore_debug_log.txt',
+);
+debugPrint('exported log path: $path');
+
+// 4.2) 读取/删除日志文件
+final currentLogPath = await GromoreFlutter.instance.getLogFilePath();
+final logContent = await GromoreFlutter.instance.readLogFileContent();
+await GromoreFlutter.instance.clearLogFile();
+await GromoreFlutter.instance.deleteLogFile();
 
 // 5) 结果处理
 if (!result.android.success) {
@@ -339,6 +360,12 @@ if (!result.ios.success) {
 
 - Debug 模式默认开启；Release 默认关闭，可手动控制。
 - 原生日志不会默认重复输出到 Dart 控制台（避免重复），可通过 `setPrintNativeLog(true)` 开启。
+- 日志级别采用“阈值模式”而不是“精确匹配模式”：选择 `info` 会记录 `info/warn/error`，选择 `debug` 会记录全部。
+- `enableLogToFile: true` 后，日志会写入应用沙盒目录下的 `gromore_flutter_logs/gromore_active_log.txt`。
+- `getLogFilePath()` 可拿到当前活跃日志文件路径，业务侧可直接展示或二次处理。
+- `readLogFileContent()` 可直接读取完整文本内容，适合在 App 内调试页展示。
+- `clearLogFile()` 仅清空文件内容；`deleteLogFile()` 会删除文件并关闭文件日志写入，若需继续记录可重新调用 `setLogFileEnabled(true)`。
+- 调用 `exportLogFile()` 会复制出一个独立的 `.txt` 文件，并返回文件路径，便于业务侧做分享、上传或反馈。
 
 ```dart
 GromoreLogger.setLogEnabled(true);

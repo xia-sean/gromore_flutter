@@ -232,6 +232,9 @@ class ExampleConfig {
   /// 是否启用日志
   bool logEnabled = true;
 
+  /// 是否写入日志文件
+  bool logToFileEnabled = false;
+
   /// 日志级别
   LogLevel logLevel = LogLevel.info;
 
@@ -294,6 +297,7 @@ class ExampleConfig {
       useMediation: useMediation,
       enabledAdTypes: enabledAdTypes,
       enableLog: logEnabled,
+      enableLogToFile: logToFileEnabled,
     );
   }
 
@@ -484,7 +488,8 @@ class _SettingsPageState extends State<SettingsPage> {
               Expanded(
                 child: TextField(
                   controller: widget.config.androidAppName,
-                  decoration: const InputDecoration(labelText: 'Android AppName'),
+                  decoration:
+                      const InputDecoration(labelText: 'Android AppName'),
                 ),
               ),
             ],
@@ -508,6 +513,12 @@ class _SettingsPageState extends State<SettingsPage> {
           value: widget.config.logEnabled,
           onChanged: (value) =>
               setState(() => widget.config.logEnabled = value),
+        ),
+        _CompactSwitchRow(
+          title: '写入日志文件',
+          value: widget.config.logToFileEnabled,
+          onChanged: (value) =>
+              setState(() => widget.config.logToFileEnabled = value),
         ),
         DropdownButtonFormField<LogLevel>(
           value: widget.config.logLevel,
@@ -968,6 +979,65 @@ class LogPage extends StatelessWidget {
   /// 日志存储
   final LogStore logStore;
 
+  Future<void> _showLogFileContent(BuildContext context) async {
+    final String content = await GromoreFlutter.instance.readLogFileContent();
+    if (!context.mounted) {
+      return;
+    }
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('文件日志内容'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: SingleChildScrollView(
+              child: SelectableText(content.isEmpty ? '暂无文件日志内容' : content),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('关闭'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _showLogFilePath(BuildContext context) async {
+    final String? path = await GromoreFlutter.instance.getLogFilePath();
+    if (!context.mounted) {
+      return;
+    }
+    final String message = path == null ? '当前没有日志文件' : '日志文件路径：$path';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _exportLogs(BuildContext context) async {
+    final String? path = await GromoreFlutter.instance.exportLogFile();
+    if (!context.mounted) {
+      return;
+    }
+    final String message = path == null ? '暂无可导出的日志文件' : '日志已导出：$path';
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  Future<void> _deleteLogFile(BuildContext context) async {
+    await GromoreFlutter.instance.deleteLogFile();
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('日志文件已删除')),
+    );
+  }
+
   /// 构建日志页界面
   ///
   /// [context] 构建上下文
@@ -977,13 +1047,39 @@ class LogPage extends StatelessWidget {
       children: [
         Padding(
           padding: const EdgeInsets.all(16),
-          child: Row(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text('日志', style: TextStyle(fontWeight: FontWeight.bold)),
-              const Spacer(),
-              TextButton(
-                onPressed: logStore.clear,
-                child: const Text('清空'),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: Wrap(
+                  spacing: 4,
+                  runSpacing: 4,
+                  children: [
+                    TextButton(
+                      onPressed: () => _showLogFilePath(context),
+                      child: const Text('路径'),
+                    ),
+                    TextButton(
+                      onPressed: () => _showLogFileContent(context),
+                      child: const Text('文件内容'),
+                    ),
+                    TextButton(
+                      onPressed: () => _exportLogs(context),
+                      child: const Text('导出'),
+                    ),
+                    TextButton(
+                      onPressed: () => _deleteLogFile(context),
+                      child: const Text('删除文件'),
+                    ),
+                    TextButton(
+                      onPressed: logStore.clear,
+                      child: const Text('清空'),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),

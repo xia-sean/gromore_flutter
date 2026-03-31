@@ -91,6 +91,7 @@ class GromoreFlutter {
 
     final bool logEnabled = config.enableLog ?? kDebugMode;
     GromoreLogger.setLogEnabled(logEnabled);
+    await GromoreLogger.setLogFileEnabled(config.enableLogToFile);
     await GromoreFlutterPlatform.instance.setLogEnabled(logEnabled);
 
     if (isAndroid) {
@@ -141,12 +142,49 @@ class GromoreFlutter {
     await GromoreFlutterPlatform.instance.setLogEnabled(enabled);
   }
 
+  /// 设置是否写入日志文件
+  ///
+  /// [enabled] 是否写入
+  Future<void> setLogFileEnabled(bool enabled) async {
+    await GromoreLogger.setLogFileEnabled(enabled);
+  }
+
   /// 设置日志级别
+  /// 采用阈值模式，而不是精确匹配模式。
+  /// 例如设置为 `LogLevel.info` 时，会输出和写入 `info/warn/error`；
+  /// 设置为 `LogLevel.debug` 时，会输出和写入全部级别日志。
   ///
   /// [level] 日志级别
   Future<void> setLogLevel(LogLevel level) async {
     GromoreLogger.setLogLevel(level);
     await GromoreFlutterPlatform.instance.setLogLevel(level);
+  }
+
+  /// 导出日志为 txt 文件，返回导出路径
+  ///
+  /// [fileName] 自定义导出文件名，需包含 `.txt`
+  Future<String?> exportLogFile({String? fileName}) async {
+    return GromoreLogger.exportLogFile(fileName: fileName);
+  }
+
+  /// 获取当前日志文件路径
+  Future<String?> getLogFilePath() async {
+    return GromoreLogger.getLogFilePath();
+  }
+
+  /// 读取当前日志文件内容
+  Future<String> readLogFileContent() async {
+    return GromoreLogger.readLogFileContent();
+  }
+
+  /// 清空当前日志文件内容
+  Future<void> clearLogFile() async {
+    await GromoreLogger.clearLogFile();
+  }
+
+  /// 删除当前日志文件
+  Future<void> deleteLogFile() async {
+    await GromoreLogger.deleteLogFile();
   }
 
   /// 加载广告

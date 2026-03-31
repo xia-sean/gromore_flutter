@@ -14,6 +14,9 @@ class GromoreConfig {
   /// [androidOptions] Android 平台扩展参数
   /// [iosOptions] iOS 平台扩展参数
   /// [enableLog] 是否启用日志（不传则 Debug 默认开、Release 默认关）
+  /// [enableLogToFile] 是否同时写入日志文件
+  /// 写入时同样遵循日志级别阈值规则：
+  /// 例如设置为 `LogLevel.info` 时，会写入 `info/warn/error`
   const GromoreConfig({
     this.androidAppId,
     this.androidAppName,
@@ -33,6 +36,7 @@ class GromoreConfig {
     this.androidOptions,
     this.iosOptions,
     this.enableLog,
+    this.enableLogToFile = false,
   });
 
   /// Android AppId
@@ -65,6 +69,10 @@ class GromoreConfig {
   /// 是否启用日志（不传则 Debug 默认开、Release 默认关）
   final bool? enableLog;
 
+  /// 是否同时写入日志文件
+  /// 写入时遵循当前日志级别阈值，而不是只写入单个级别
+  final bool enableLogToFile;
+
   /// 转为通道传输 Map
   Map<String, dynamic> toMap() {
     return {
@@ -78,6 +86,7 @@ class GromoreConfig {
       'androidOptions': androidOptions,
       'iosOptions': iosOptions,
       'enableLog': enableLog,
+      'enableLogToFile': enableLogToFile,
     };
   }
 }

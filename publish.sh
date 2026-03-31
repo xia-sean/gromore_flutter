@@ -8,37 +8,67 @@ trap 'echo "检测到中断，已停止发布流程，不会继续提交/打标�
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$ROOT_DIR"
 
-trim_whitespace() {
-  local s="$1"
-  s="${s#"${s%%[![:space:]]*}"}"
-  s="${s%"${s##*[![:space:]]}"}"
-  printf '%s' "$s"
+RELEASE_META_FILE="$(mktemp)"
+cleanup() {
+  rm -f "$RELEASE_META_FILE"
 }
+trap cleanup EXIT
 
-prompt_input() {
-  local prompt="$1"
-  local value=""
-  if ! tty -s || [[ ! -r /dev/tty ]]; then
-    echo "当前环境无可交互终端(/dev/tty)，请在终端中直接执行 ./publish.sh。" >&2
-    exit 1
-  fi
-  if ! IFS= read -r -e -p "$prompt" value < /dev/tty; then
-    echo "读取输入失败，已取消发布。" >&2
-    exit 1
-  fi
-  value="${value//$'\r'/}"
-  printf '%s' "$(trim_whitespace "$value")"
-}
+python3 - <<'PY' "$RELEASE_META_FILE"
+import json
+import re
+import sys
+from pathlib import Path
 
-VERSION="$(prompt_input "请输入要发布的版本号(例如 2.1.3): ")"
-if [[ -z "$VERSION" ]]; then
-  echo "版本号不能为空"
-  exit 1
-fi
-if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]]; then
-  echo "版本号格式不合法，应为 semver（例如 2.1.3 或 2.1.3+1）"
-  exit 1
-fi
+output_path = Path(sys.argv[1])
+changelog_path = Path("CHANGELOG.md")
+if not changelog_path.exists():
+    sys.exit("未找到 CHANGELOG.md")
+
+lines = changelog_path.read_text(encoding="utf-8").splitlines()
+start_idx = None
+version = None
+for i, line in enumerate(lines):
+    match = re.match(r"^##\s+([0-9]+\.[0-9]+\.[0-9]+(?:[+-][0-9A-Za-z.-]+)?)\s*$", line.strip())
+    if match:
+        start_idx = i
+        version = match.group(1)
+        break
+
+if version is None or start_idx is None:
+    sys.exit("CHANGELOG.md 顶部未找到合法版本标题（例如 ## 2.1.8）")
+
+items = []
+for line in lines[start_idx + 1:]:
+    if re.match(r"^##\s+", line):
+        break
+    match = re.match(r"^-\s+(.+?)\s*$", line)
+    if match:
+        items.append(match.group(1).strip())
+
+if not items:
+    sys.exit(f"CHANGELOG.md 顶部版本 {version} 未找到更新条目，请至少保留一条 - 开头的记录")
+
+output_path.write_text(
+    json.dumps({"version": version, "items": items}, ensure_ascii=False),
+    encoding="utf-8",
+)
+
+print(f"检测到待发布版本：{version}")
+print("检测到待发布内容：")
+for item in items:
+    print(f"- {item}")
+PY
+
+VERSION="$(python3 - <<'PY' "$RELEASE_META_FILE"
+import json
+import sys
+from pathlib import Path
+
+data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+print(data["version"])
+PY
+)"
 
 TAG_NAME="v${VERSION}"
 if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -53,25 +83,16 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
   fi
 fi
 
-CHANGELOG_ITEMS="$(prompt_input "请输入本次发版新增内容（多条用 ;/； 分隔）: ")"
-if [[ -z "$CHANGELOG_ITEMS" ]]; then
-  echo "发版内容不能为空"
-  exit 1
-fi
-export CHANGELOG_ITEMS
-
-python3 - <<'PY' "$VERSION"
-import os
+python3 - <<'PY' "$RELEASE_META_FILE"
+import json
 import re
 import sys
 from pathlib import Path
 
-version = sys.argv[1]
+meta = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+version = meta["version"]
+items = meta["items"]
 root = Path(".")
-changelog_raw = os.environ.get("CHANGELOG_ITEMS", "").strip()
-items = [s.strip().lstrip("- ").strip() for s in re.split(r"\s*[;；]\s*", changelog_raw) if s.strip()]
-if not items:
-    sys.exit("发版内容不能为空")
 
 def update_file(path: Path, pattern: str, repl: str, flags=0, required=False, count=0):
     if not path.exists():
@@ -111,32 +132,15 @@ update_file(
     f"gromore_flutter: ^{version}",
 )
 
-# CHANGELOG 顶部版本（必需：替换首个版本标题）
+# CHANGELOG（必需：校验顶部版本块与脚本读取结果一致）
 changelog_path = root / "CHANGELOG.md"
 if not changelog_path.exists():
     sys.exit("未找到 CHANGELOG.md")
 
 lines = changelog_path.read_text(encoding="utf-8").splitlines()
-start_idx = None
-for i, line in enumerate(lines):
-    if re.match(r"^##\s+[0-9]+\.[0-9]+\.[0-9]+", line):
-        start_idx = i
-        break
-if start_idx is None:
+top_heading = next((line.strip() for line in lines if line.strip()), "")
+if top_heading != f"## {version}":
     sys.exit("CHANGELOG.md 中未找到版本标题")
-
-end_idx = len(lines)
-for j in range(start_idx + 1, len(lines)):
-    if re.match(r"^##\s+[0-9]+\.[0-9]+\.[0-9]+", lines[j]):
-        end_idx = j
-        break
-
-new_block = [f"## {version}", ""]
-new_block.extend([f"- {item}" for item in items])
-new_block.append("")
-
-new_lines = lines[:start_idx] + new_block + lines[end_idx:]
-changelog_path.write_text("\n".join(new_lines).rstrip() + "\n", encoding="utf-8")
 PY
 
 export PUB_HOSTED_URL="https://pub.dev"
@@ -211,12 +215,13 @@ if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/n
     echo "如需终止提交，请现在按 Ctrl+C"
     git add -A
     COMMIT_TITLE="release: v${VERSION}"
-    COMMIT_BODY="$(python3 - <<'PY'
-import os
-import re
+    COMMIT_BODY="$(python3 - <<'PY' "$RELEASE_META_FILE"
+import json
+import sys
+from pathlib import Path
 
-raw = os.environ.get("CHANGELOG_ITEMS", "")
-items = [s.strip().lstrip("- ").strip() for s in re.split(r"\s*[;；]\s*", raw) if s.strip()]
+data = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+items = data["items"]
 print("\n".join(f"- {item}" for item in items))
 PY
     )"

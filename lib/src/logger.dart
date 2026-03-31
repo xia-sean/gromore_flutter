@@ -1,6 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import 'log_file_store.dart';
+
 /// 日志级别枚举
+/// 用作日志过滤阈值，而不是“只记录该级别”。
+/// 例如 `LogLevel.warn` 表示记录 `warn` 和 `error`。
 enum LogLevel {
   /// Debug 级别
   debug,
@@ -146,6 +152,7 @@ class GromoreLogger {
   static bool _enabled = kDebugMode;
 
   /// 当前日志级别
+  /// 作为日志过滤阈值使用
   static LogLevel _level = LogLevel.info;
 
   /// 日志处理回调
@@ -154,11 +161,17 @@ class GromoreLogger {
   /// 是否输出原生日志到控制台
   static bool _printNativeLog = false;
 
+  /// 是否写入日志文件
+  static bool _writeToFile = false;
+
   /// 获取是否启用日志
   static bool get enabled => _enabled;
 
   /// 获取当前日志级别
   static LogLevel get level => _level;
+
+  /// 获取是否写入日志文件
+  static bool get writeToFileEnabled => _writeToFile;
 
   /// 设置日志开关
   ///
@@ -168,6 +181,9 @@ class GromoreLogger {
   }
 
   /// 设置日志级别
+  /// 采用阈值模式，而不是精确匹配模式。
+  /// 例如设置为 `LogLevel.info` 时，会记录 `info/warn/error`；
+  /// 设置为 `LogLevel.debug` 时，会记录全部级别日志。
   ///
   /// [level] 日志级别
   static void setLogLevel(LogLevel level) {
@@ -186,6 +202,39 @@ class GromoreLogger {
   /// [enabled] 是否打印
   static void setPrintNativeLog(bool enabled) {
     _printNativeLog = enabled;
+  }
+
+  /// 设置是否写入日志文件
+  /// 文件写入同样遵循当前日志级别阈值。
+  static Future<void> setLogFileEnabled(bool enabled) async {
+    _writeToFile = enabled;
+    await GromoreLogFileStore.configure(enabled: enabled);
+  }
+
+  /// 导出日志为 txt 文件，返回导出路径
+  static Future<String?> exportLogFile({String? fileName}) {
+    return GromoreLogFileStore.export(fileName: fileName);
+  }
+
+  /// 获取当前日志文件路径
+  static Future<String?> getLogFilePath() {
+    return GromoreLogFileStore.getActiveLogFilePath();
+  }
+
+  /// 读取当前日志文件内容
+  static Future<String> readLogFileContent() {
+    return GromoreLogFileStore.readContent();
+  }
+
+  /// 清空当前日志文件内容
+  static Future<void> clearLogFile() {
+    return GromoreLogFileStore.clear();
+  }
+
+  /// 删除当前日志文件
+  static Future<void> deleteLogFile() async {
+    _writeToFile = false;
+    await GromoreLogFileStore.delete();
   }
 
   /// 输出 debug 日志
@@ -227,8 +276,11 @@ class GromoreLogger {
     if (_handler != null) {
       _handler!(event);
     }
+    if (_writeToFile && _shouldLog(event.level)) {
+      GromoreLogFileStore.appendLine(format(event));
+    }
     if (_printNativeLog && _shouldLog(event.level)) {
-      debugPrint(_format(event));
+      debugPrint(format(event));
     }
   }
 
@@ -238,7 +290,8 @@ class GromoreLogger {
   /// [message] 日志内容
   /// [tag] 日志标签
   /// [source] 日志来源
-  static void _log(LogLevel level, String message, String tag, LogSource source) {
+  static void _log(
+      LogLevel level, String message, String tag, LogSource source) {
     if (!_shouldLog(level)) {
       return;
     }
@@ -252,10 +305,15 @@ class GromoreLogger {
     if (_handler != null) {
       _handler!(event);
     }
-    debugPrint(_format(event));
+    final String formatted = format(event);
+    if (_writeToFile) {
+      GromoreLogFileStore.appendLine(formatted);
+    }
+    debugPrint(formatted);
   }
 
   /// 判断是否需要输出日志
+  /// 按“当前级别及以上”规则过滤。
   ///
   /// [level] 日志级别
   static bool _shouldLog(LogLevel level) {
@@ -268,7 +326,7 @@ class GromoreLogger {
   /// 格式化日志文本
   ///
   /// [event] 日志事件
-  static String _format(LogEvent event) {
+  static String format(LogEvent event) {
     final time = event.timestamp.toIso8601String();
     return '[${event.source.value}][${event.level.value}][${event.tag}] $time ${event.message}';
   }

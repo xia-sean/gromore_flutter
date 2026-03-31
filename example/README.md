@@ -107,6 +107,7 @@ final config = GromoreConfig(
   debug: true,
   useMediation: true,
   enableLog: true,
+  enableLogToFile: true,
   enabledAdTypes: {
     GromoreAdType.splash,
     GromoreAdType.interstitial,
@@ -119,6 +120,24 @@ final config = GromoreConfig(
 );
 
 final result = await GromoreFlutter.instance.init(config);
+```
+
+导出日志：
+
+```dart
+final path = await GromoreFlutter.instance.exportLogFile(
+  fileName: 'gromore_debug_log.txt',
+);
+debugPrint('log exported: $path');
+```
+
+读取、展示、删除日志：
+
+```dart
+final currentLogPath = await GromoreFlutter.instance.getLogFilePath();
+final content = await GromoreFlutter.instance.readLogFileContent();
+await GromoreFlutter.instance.clearLogFile();
+await GromoreFlutter.instance.deleteLogFile();
 ```
 
 如需请求 iOS ATT：

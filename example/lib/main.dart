@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:gromore_flutter/gromore_flutter.dart';
 
 /// 示例应用入口
@@ -45,10 +46,17 @@ class _GromoreExampleAppState extends State<GromoreExampleApp> {
       final level = event.eventType == GromoreAdEventType.failed
           ? LogLevel.error
           : LogLevel.info;
+      String suffix = event.errorMessage ?? '';
+      if (event.eventType == GromoreAdEventType.rendered) {
+        final data = event.data;
+        final width = data?['renderWidth'];
+        final height = data?['renderHeight'];
+        suffix = 'renderSize=$width x $height';
+      }
       _logStore.add(LogEvent(
         level: level,
         message:
-            'Ad event: ${event.adType.value} ${event.eventType.value} ${event.errorMessage ?? ''}',
+            'Ad event: ${event.adType.value} ${event.eventType.value} $suffix',
         tag: 'ad',
         timestamp: DateTime.now(),
         source: LogSource.dart,
@@ -167,19 +175,17 @@ class ExampleConfig {
     _applyDefaults();
   }
 
-  static const String _androidAppIdDefault = '5786586';
-  static const String _androidAppNameDefault = '妖怪记账';
-  static const String _iosAppIdDefault = '5786645';
-  static const String _iosAppNameDefault = '妖怪记账';
+  static const String _iosAppIdDefault = '5820777';
+  static const String _iosAppNameDefault = 'Example-iOS';
 
   static const Map<GromoreAdType, String> _androidPlacementDefaults = {
-    GromoreAdType.splash: '103864669',
-    GromoreAdType.interstitial: '103864673',
-    GromoreAdType.fullscreenVideo: '103864673',
-    GromoreAdType.rewardVideo: '103866429',
-    GromoreAdType.native: '103864082',
-    GromoreAdType.drawNative: '103875848',
-    GromoreAdType.banner: '103866153',
+    GromoreAdType.splash: '104037358',
+    GromoreAdType.interstitial: '104036683',
+    GromoreAdType.fullscreenVideo: '104036683',
+    GromoreAdType.rewardVideo: '104036684',
+    GromoreAdType.native: '104037455',
+    GromoreAdType.drawNative: '104037163',
+    GromoreAdType.banner: '104037605',
   };
 
   static const Map<GromoreAdType, String> _iosPlacementDefaults = {
@@ -241,6 +247,9 @@ class ExampleConfig {
   /// 是否已初始化 SDK
   bool isInitialized = false;
 
+  /// iOS ATT 是否已请求
+  bool attRequested = false;
+
   /// 启用的广告类型集合
   Set<GromoreAdType> enabledAdTypes = {};
 
@@ -262,8 +271,8 @@ class ExampleConfig {
   }
 
   void _applyDefaults() {
-    androidAppId.text = _androidAppIdDefault;
-    androidAppName.text = _androidAppNameDefault;
+    androidAppId.text = '';
+    androidAppName.text = '';
     iosAppId.text = _iosAppIdDefault;
     iosAppName.text = _iosAppNameDefault;
 
@@ -296,6 +305,25 @@ class ExampleConfig {
       debug: debug,
       useMediation: useMediation,
       enabledAdTypes: enabledAdTypes,
+      androidOptions: isAndroid
+          ? {
+              'privacy': {
+                'canUseLocation': false,
+                'canUsePhoneState': false,
+                'canUseOaid': false,
+              },
+            }
+          : null,
+      iosOptions: isIos
+          ? {
+              'privacy': {
+                'canUseLocation': false,
+              },
+              'mediation': {
+                'limitPersonalAds': 1,
+              },
+            }
+          : null,
       enableLog: logEnabled,
       enableLogToFile: logToFileEnabled,
     );
@@ -365,6 +393,28 @@ class _SettingsPageState extends State<SettingsPage> {
   /// 是否正在初始化
   bool _isInitializing = false;
 
+  /// 是否正在读取原生初始化状态
+  bool _isCheckingNativeStatus = false;
+
+  Future<void> _requestAtt() async {
+    final granted = await GromoreFlutter.instance.requestATT();
+    widget.config.attRequested = true;
+    widget.logStore.add(LogEvent(
+      level: LogLevel.info,
+      message: 'ATT result: $granted',
+      tag: 'privacy',
+      timestamp: DateTime.now(),
+      source: LogSource.dart,
+    ));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(granted ? 'ATT 已授权或无需授权' : 'ATT 未授权')),
+    );
+    setState(() {});
+  }
+
   Future<void> _showInitDialog({
     required bool success,
     required String message,
@@ -385,6 +435,52 @@ class _SettingsPageState extends State<SettingsPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _showNativeInitStatus() async {
+    if (!widget.config.isAndroid) {
+      return;
+    }
+    setState(() {
+      _isCheckingNativeStatus = true;
+    });
+    try {
+      final dynamic result = await GromoreFlutter.instance.invokeNative(
+        'getInitializationStatus',
+        null,
+      );
+      final Map<dynamic, dynamic> status =
+          result is Map ? result : <dynamic, dynamic>{};
+      final String message = status.entries
+          .map((entry) => '${entry.key}: ${entry.value}')
+          .join('\n');
+      widget.logStore.add(LogEvent(
+        level: LogLevel.info,
+        message: 'Native init status: $status',
+        tag: 'init',
+        timestamp: DateTime.now(),
+        source: LogSource.dart,
+      ));
+      await _showInitDialog(
+        success: status['isInitSuccess'] == true,
+        message: message.isEmpty ? '未获取到原生初始化状态' : message,
+      );
+    } catch (error) {
+      widget.logStore.add(LogEvent(
+        level: LogLevel.error,
+        message: 'Get native init status exception: $error',
+        tag: 'init',
+        timestamp: DateTime.now(),
+        source: LogSource.dart,
+      ));
+      await _showInitDialog(success: false, message: '读取原生初始化状态异常：$error');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isCheckingNativeStatus = false;
+        });
+      }
+    }
   }
 
   /// 执行初始化逻辑
@@ -455,6 +551,61 @@ class _SettingsPageState extends State<SettingsPage> {
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
+        if (isIos) ...[
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: _requestAtt,
+              child: Text(
+                widget.config.attRequested ? '重新请求 ATT' : '先请求 ATT',
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'iOS 建议先请求 ATT，再初始化 SDK；示例工程已预置 ATT 文案与基础 SKAdNetworkItems。',
+            style: TextStyle(color: Colors.black54),
+          ),
+          const SizedBox(height: 8),
+        ],
+        if (isAndroid) ...[
+          const Text(
+            'Android 宿主接入方式',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const _IntegrationModeCard(
+            title: '方案 A：单进程',
+            subtitle: '适合普通 Flutter App',
+            description:
+                '直接在 Flutter 调用 init(config)，并传 androidAppId/androidAppName。宿主原生不用额外控制初始化时机。',
+          ),
+          const SizedBox(height: 8),
+          const _IntegrationModeCard(
+            title: '方案 B：多进程自动初始化',
+            subtitle: '适合多进程且允许启动即初始化',
+            description:
+                '在 AndroidManifest.xml + res/values/gromore_config.xml 配置 APP_ID/APP_NAME/AUTO_INIT=true。Flutter 侧可不再传 Android appId/appName。',
+          ),
+          const SizedBox(height: 8),
+          const _IntegrationModeCard(
+            title: '方案 C：隐私同意后初始化',
+            subtitle: '适合合规要求更严格的宿主',
+            description:
+                '把 AUTO_INIT=false，并在宿主原生 Application 或隐私同意回调里调用 GromoreFlutterNativeInit.initializeFromManifest(...)。',
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Android 示例已改为 manifest meta-data + 原生资源文件自动初始化。AppId/AppName 可以留空，点击“初始化 SDK”时会优先复用宿主原生配置；这也是多进程场景推荐的接入方式。',
+            style: TextStyle(color: Colors.black54),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '示例配置文件在 example/android/app/src/main/AndroidManifest.xml 与 res/values/gromore_config.xml。若业务要做隐私同意后再初始化，请关闭 AUTO_INIT，并改为在宿主原生 Application/各进程里调用初始化。',
+            style: TextStyle(color: Colors.black54),
+          ),
+          const SizedBox(height: 8),
+        ],
         const Text('App 配置', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
         if (isIos)
@@ -481,15 +632,20 @@ class _SettingsPageState extends State<SettingsPage> {
               Expanded(
                 child: TextField(
                   controller: widget.config.androidAppId,
-                  decoration: const InputDecoration(labelText: 'Android AppId'),
+                  decoration: const InputDecoration(
+                    labelText: 'Android AppId',
+                    hintText: '留空则使用 manifest meta-data',
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: TextField(
                   controller: widget.config.androidAppName,
-                  decoration:
-                      const InputDecoration(labelText: 'Android AppName'),
+                  decoration: const InputDecoration(
+                    labelText: 'Android AppName',
+                    hintText: '留空则使用 manifest meta-data',
+                  ),
                 ),
               ),
             ],
@@ -582,6 +738,18 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Text(_isInitializing ? '初始化中...' : '初始化 SDK'),
           ),
         ),
+        if (isAndroid) ...[
+          const SizedBox(height: 8),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton(
+              onPressed: _isCheckingNativeStatus ? null : _showNativeInitStatus,
+              child: Text(
+                _isCheckingNativeStatus ? '读取中...' : '查看原生初始化状态',
+              ),
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -648,6 +816,52 @@ class _CompactSwitchRow extends StatelessWidget {
             value: value,
             onChanged: onChanged,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IntegrationModeCard extends StatelessWidget {
+  const _IntegrationModeCard({
+    required this.title,
+    required this.subtitle,
+    required this.description,
+  });
+
+  final String title;
+  final String subtitle;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            style: const TextStyle(
+              color: Colors.black54,
+              fontSize: 12,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(description),
         ],
       ),
     );
@@ -825,7 +1039,7 @@ class _AdPageState extends State<AdPage> {
         source: LogSource.dart,
       ));
     } finally {
-      await sub?.cancel();
+      await sub.cancel();
       if (mounted) {
         setState(() {
           _isShowing = false;
@@ -979,6 +1193,31 @@ class LogPage extends StatelessWidget {
   /// 日志存储
   final LogStore logStore;
 
+  String _formatLogLine(LogEvent log) {
+    return '[${log.source.value}] '
+        '${log.timestamp.toIso8601String()} '
+        '${log.level.value} '
+        '${log.message}';
+  }
+
+  Future<void> _copyLogs(BuildContext context) async {
+    final logs = logStore.logs.value;
+    if (logs.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('暂无可复制日志')),
+      );
+      return;
+    }
+    final content = logs.reversed.map(_formatLogLine).join('\n');
+    await Clipboard.setData(ClipboardData(text: content));
+    if (!context.mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已复制 ${logs.length} 条日志')),
+    );
+  }
+
   Future<void> _showLogFileContent(BuildContext context) async {
     final String content = await GromoreFlutter.instance.readLogFileContent();
     if (!context.mounted) {
@@ -1075,6 +1314,10 @@ class LogPage extends StatelessWidget {
                       child: const Text('删除文件'),
                     ),
                     TextButton(
+                      onPressed: () => _copyLogs(context),
+                      child: const Text('复制全部'),
+                    ),
+                    TextButton(
                       onPressed: logStore.clear,
                       child: const Text('清空'),
                     ),
@@ -1096,7 +1339,7 @@ class LogPage extends StatelessWidget {
                 itemCount: logs.length,
                 separatorBuilder: (_, __) => const Divider(height: 1),
                 itemBuilder: (context, index) {
-                  final log = logs[index];
+                  final log = logs[logs.length - 1 - index];
                   return ListTile(
                     dense: true,
                     title: Text('[${log.source.value}] ${log.message}'),

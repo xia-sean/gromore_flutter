@@ -19,8 +19,7 @@ import '../gromore_flutter_platform_interface.dart';
 /// ```dart
 /// final result = await GromoreFlutter.instance.init(
 ///   const GromoreConfig(
-///     androidAppId: 'your_android_app_id',
-///     androidAppName: 'your_android_app_name',
+///     // Android 已通过 manifest meta-data 配置时可省略 androidAppId/androidAppName
 ///     iosAppId: 'your_ios_app_id',
 ///     iosAppName: 'your_ios_app_name',
 ///   ),
@@ -95,13 +94,6 @@ class GromoreFlutter {
     await GromoreFlutterPlatform.instance.setLogEnabled(logEnabled);
 
     if (isAndroid) {
-      final PlatformInitResult androidResult = _validateAndroid(config);
-      if (!androidResult.success) {
-        return InitResult(
-          android: androidResult,
-          ios: const PlatformInitResult.skipped(reason: 'not_running_on_ios'),
-        );
-      }
       final PlatformInitResult result =
           await GromoreFlutterPlatform.instance.init(config);
       return InitResult(
@@ -377,27 +369,6 @@ class GromoreFlutter {
     await Future<void>.delayed(const Duration(milliseconds: 80));
   }
 
-  /// 校验 Android 初始化参数
-  ///
-  /// [config] 初始化配置
-  PlatformInitResult _validateAndroid(GromoreConfig config) {
-    if ((config.androidAppId ?? '').isEmpty) {
-      GromoreLogger.error('Android appId is missing.', tag: 'init');
-      return const PlatformInitResult.failure(
-        errorCode: 'missing_android_app_id',
-        errorMessage: 'Android appId is missing.',
-      );
-    }
-    if ((config.androidAppName ?? '').isEmpty) {
-      GromoreLogger.error('Android appName is missing.', tag: 'init');
-      return const PlatformInitResult.failure(
-        errorCode: 'missing_android_app_name',
-        errorMessage: 'Android appName is missing.',
-      );
-    }
-    return const PlatformInitResult.success();
-  }
-
   /// 校验 iOS 初始化参数
   ///
   /// [config] 初始化配置
@@ -407,13 +378,6 @@ class GromoreFlutter {
       return const PlatformInitResult.failure(
         errorCode: 'missing_ios_app_id',
         errorMessage: 'iOS appId is missing.',
-      );
-    }
-    if ((config.iosAppName ?? '').isEmpty) {
-      GromoreLogger.error('iOS appName is missing.', tag: 'init');
-      return const PlatformInitResult.failure(
-        errorCode: 'missing_ios_app_name',
-        errorMessage: 'iOS appName is missing.',
       );
     }
     return const PlatformInitResult.success();

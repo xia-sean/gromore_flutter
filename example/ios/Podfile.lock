@@ -1,16 +1,16 @@
 PODS:
-  - Ads-CN-Beta (7.4.0.1):
-    - Ads-CN-Beta/BUAdLive-Framework (= 7.4.0.1)
-    - Ads-CN-Beta/BUAdSDK (= 7.4.0.1)
-  - Ads-CN-Beta/BUAdLive (7.4.0.1)
-  - Ads-CN-Beta/BUAdLive-Framework (7.4.0.1):
+  - Ads-CN-Beta (7.5.0.4):
+    - Ads-CN-Beta/BUAdLive-Framework (= 7.5.0.4)
+    - Ads-CN-Beta/BUAdSDK (= 7.5.0.4)
+  - Ads-CN-Beta/BUAdLive (7.5.0.4)
+  - Ads-CN-Beta/BUAdLive-Framework (7.5.0.4):
     - Ads-CN-Beta/BUAdLive
     - BUTTSDKFramework/LivePull-Lite (= 1.48.2.3-premium)
-  - Ads-CN-Beta/BUAdSDK (7.4.0.1)
-  - Ads-CN-Beta/CSJMediation (7.4.0.1):
+  - Ads-CN-Beta/BUAdSDK (7.5.0.4)
+  - Ads-CN-Beta/CSJMediation (7.5.0.4):
     - Ads-CN-Beta/BUAdLive-Framework
     - Ads-CN-Beta/CSJMediation-Only
-  - Ads-CN-Beta/CSJMediation-Only (7.4.0.1):
+  - Ads-CN-Beta/CSJMediation-Only (7.5.0.4):
     - Ads-CN-Beta/BUAdSDK
   - BUTTSDKFramework/Core (1.48.2.3-premium)
   - BUTTSDKFramework/LiveBase (1.48.2.3-premium):
@@ -44,18 +44,18 @@ PODS:
   - BUTTSDKFramework/TTFFmpeg/LiveLite (1.48.2.3-premium)
   - BUTTSDKFramework/VolcLog (1.48.2.3-premium)
   - Flutter (1.0.0)
-  - gromore_flutter (2.1.7):
-    - Ads-CN-Beta (= 7.4.0.1)
+  - gromore_flutter (2.1.8):
+    - Ads-CN-Beta (= 7.5.0.4)
     - Flutter
-    - gromore_flutter/BUAdSDK (= 2.1.7)
-    - gromore_flutter/CSJMediation (= 2.1.7)
-  - gromore_flutter/BUAdSDK (2.1.7):
-    - Ads-CN-Beta (= 7.4.0.1)
-    - Ads-CN-Beta/BUAdSDK (= 7.4.0.1)
+    - gromore_flutter/BUAdSDK (= 2.1.8)
+    - gromore_flutter/CSJMediation (= 2.1.8)
+  - gromore_flutter/BUAdSDK (2.1.8):
+    - Ads-CN-Beta (= 7.5.0.4)
+    - Ads-CN-Beta/BUAdSDK (= 7.5.0.4)
     - Flutter
-  - gromore_flutter/CSJMediation (2.1.7):
-    - Ads-CN-Beta (= 7.4.0.1)
-    - Ads-CN-Beta/CSJMediation (= 7.4.0.1)
+  - gromore_flutter/CSJMediation (2.1.8):
+    - Ads-CN-Beta (= 7.5.0.4)
+    - Ads-CN-Beta/CSJMediation (= 7.5.0.4)
     - Flutter
   - integration_test (0.0.1):
     - Flutter
@@ -64,7 +64,7 @@ PODS:
     - FlutterMacOS
 
 DEPENDENCIES:
-  - Ads-CN-Beta/CSJMediation (= 7.4.0.1)
+  - Ads-CN-Beta/CSJMediation (= 7.5.0.4)
   - Flutter (from `Flutter`)
   - gromore_flutter (from `.symlinks/plugins/gromore_flutter/ios`)
   - integration_test (from `.symlinks/plugins/integration_test/ios`)
@@ -86,13 +86,13 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/path_provider_foundation/darwin"
 
 SPEC CHECKSUMS:
-  Ads-CN-Beta: a67939685f31aa8b9041d0403c3abcb056f107d3
+  Ads-CN-Beta: 5d4d327e362d8190cae09b2193c302221eb99431
   BUTTSDKFramework: 34f8f8d541da07e79e9c479eb71336d1e4d90fdd
   Flutter: e0871f40cf51350855a761d2e70bf5af5b9b5de7
-  gromore_flutter: fcc76e475b651bcd8a9fcd8b5fc2e408cb2b4704
+  gromore_flutter: ecffe11872cecfffb04c7950e890652df8b0b225
   integration_test: 252f60fa39af5e17c3aa9899d35d908a0721b573
   path_provider_foundation: 2b6b4c569c0fb62ec74538f866245ac84301af46
 
-PODFILE CHECKSUM: 596ce342c893f73271871c9b9a1624306429c8a2
+PODFILE CHECKSUM: 2b0b7a5cc63fe48cf0dffd2d2adcc89d579b1a87
 
 COCOAPODS: 1.16.2

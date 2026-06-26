@@ -2,6 +2,7 @@ import Flutter
 import UIKit
 import BUAdSDK
 import AppTrackingTransparency
+import CoreLocation
 
 /// GroMore Flutter 插件 iOS 实现
 public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
@@ -18,6 +19,8 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
 
   /// 广告管理器
   private var adManager: GromoreAdManager?
+  /// 初始化隐私提供器，需要持有引用避免被释放
+  private var privacyProvider: GromorePrivacyProvider?
 
   /// 初始化状态
   private var initInProgress = false
@@ -90,9 +93,9 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
   private func handleInit(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let args = call.arguments as? [String: Any]
     let appId = args?["iosAppId"] as? String
-    let appName = args?["iosAppName"] as? String
     let debug = args?["debug"] as? Bool ?? false
     let useMediation = args?["useMediation"] as? Bool ?? true
+    let iosOptions = args?["iosOptions"] as? [String: Any] ?? [:]
     if let enableLog = args?["enableLog"] as? Bool {
       logEnabled = enableLog
     }
@@ -103,16 +106,6 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
         "success": false,
         "errorCode": "missing_ios_app_id",
         "errorMessage": "iOS appId is missing."
-      ])
-      return
-    }
-
-    if appName == nil || appName?.isEmpty == true {
-      emitLog(level: "error", message: "iOS appName is missing.", tag: "init")
-      result([
-        "success": false,
-        "errorCode": "missing_ios_app_name",
-        "errorMessage": "iOS appName is missing."
       ])
       return
     }
@@ -138,6 +131,30 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
     configuration.appID = appId
     configuration.debugLog = NSNumber(value: debug ? 1 : 0)
     configuration.useMediation = useMediation
+    if let ageGroupRaw = readInt(iosOptions, key: "ageGroup"),
+       let ageGroup = BUAdSDKAgeGroup(rawValue: ageGroupRaw) {
+      configuration.ageGroup = ageGroup
+    }
+    if let userExtData = readString(iosOptions, key: "userExtData") {
+      configuration.userExtData = userExtData
+    }
+    if let themeStatus = readInt(iosOptions, key: "themeStatus") {
+      configuration.themeStatus = NSNumber(value: themeStatus)
+    }
+    if let customIdfa = readString(iosOptions, key: "customIdfa") {
+      configuration.customIdfa = customIdfa
+    }
+    if let allowModifyAudioSessionSetting = readBool(iosOptions, key: "allowModifyAudioSessionSetting") {
+      configuration.allowModifyAudioSessionSetting = allowModifyAudioSessionSetting
+    }
+    if let unityDeveloper = readBool(iosOptions, key: "unityDeveloper") {
+      configuration.unityDeveloper = unityDeveloper
+    }
+    if let provider = buildPrivacyProvider(options: iosOptions) {
+      privacyProvider = provider
+      configuration.privacyProvider = provider
+    }
+    applyMediationOptions(iosOptions, configuration: configuration)
 
     BUAdSDKManager.start(asyncCompletionHandler: { success, error in
       self.initInProgress = false
@@ -339,6 +356,144 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
     }
   }
 
+  private func buildPrivacyProvider(options: [String: Any]) -> GromorePrivacyProvider? {
+    let privacy = options["privacy"] as? [String: Any] ?? [:]
+    return privacy.isEmpty ? nil : GromorePrivacyProvider(options: privacy)
+  }
+
+  private func applyMediationOptions(_ options: [String: Any], configuration: BUAdSDKConfiguration) {
+    let mediation = options["mediation"] as? [String: Any] ?? [:]
+    if let limitPersonalAds = readNumber(mediation, key: "limitPersonalAds") {
+      configuration.mediation.limitPersonalAds = limitPersonalAds
+    }
+    if let limitProgrammaticAds = readNumber(mediation, key: "limitProgrammaticAds") {
+      configuration.mediation.limitProgrammaticAds = limitProgrammaticAds
+    }
+    if let forbiddenIDFA = readNumber(mediation, key: "forbiddenIDFA") {
+      configuration.mediation.forbiddenIDFA = forbiddenIDFA
+    }
+    if let advanceSDKConfigPath = readString(mediation, key: "advanceSDKConfigPath") {
+      configuration.mediation.advanceSDKConfigPath = advanceSDKConfigPath
+    }
+    if let extraDeviceMap = mediation["extraDeviceMap"] as? [String: Any] {
+      configuration.mediation.extraDeviceMap = extraDeviceMap
+    }
+    if let allowUploadDeviceInfo = readBool(mediation, key: "allowUploadDeviceInfo") {
+      configuration.mediation.allowUploadDeviceInfo = allowUploadDeviceInfo
+    }
+    if let segment = buildSegmentInfo(mediation["userInfoForSegment"] as? [String: Any]) {
+      configuration.mediation.userInfoForSegment = segment
+    }
+    if let extraData = mediation["extraData"] as? [String: Any] {
+      for (key, value) in extraData {
+        configuration.mediation.setExtraData(value, forKey: key)
+      }
+    }
+  }
+
+  private func buildSegmentInfo(_ raw: [String: Any]?) -> BUMUserInfoForSegment? {
+    guard let raw else { return nil }
+    let info = BUMUserInfoForSegment()
+    var hasValue = false
+    if let userId = readString(raw, key: "userId") {
+      info.user_id = userId
+      hasValue = true
+    }
+    if let channel = readString(raw, key: "channel") {
+      info.channel = channel
+      hasValue = true
+    }
+    if let subChannel = readString(raw, key: "subChannel") {
+      info.sub_channel = subChannel
+      hasValue = true
+    }
+    if let age = readInt(raw, key: "age") {
+      info.age = age
+      hasValue = true
+    }
+    if let genderRaw = readInt(raw, key: "gender"),
+       let gender = BUUserInfoGender(rawValue: genderRaw) {
+      info.gender = gender
+      hasValue = true
+    }
+    if let userValueGroup = readString(raw, key: "userValueGroup") {
+      info.user_value_group = userValueGroup
+      hasValue = true
+    }
+    if let customized = raw["customizedId"] as? [String: Any] {
+      info.customized_id = customized.mapValues { "\($0)" }
+      hasValue = true
+    }
+    return hasValue ? info : nil
+  }
+
+  private func readString(_ source: [String: Any], key: String) -> String? {
+    if let value = source[key] as? String, !value.isEmpty {
+      return value
+    }
+    if let value = source[key] {
+      let string = "\(value)"
+      return string.isEmpty ? nil : string
+    }
+    return nil
+  }
+
+  private func readBool(_ source: [String: Any], key: String) -> Bool? {
+    switch source[key] {
+    case let value as Bool:
+      return value
+    case let value as NSNumber:
+      return value.boolValue
+    case let value as String:
+      switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+      case "true", "1", "yes":
+        return true
+      case "false", "0", "no":
+        return false
+      default:
+        return nil
+      }
+    default:
+      return nil
+    }
+  }
+
+  private func readInt(_ source: [String: Any], key: String) -> Int? {
+    switch source[key] {
+    case let value as Int:
+      return value
+    case let value as NSNumber:
+      return value.intValue
+    case let value as String:
+      return Int(value)
+    default:
+      return nil
+    }
+  }
+
+  private func readNumber(_ source: [String: Any], key: String) -> NSNumber? {
+    switch source[key] {
+    case let value as NSNumber:
+      return value
+    case let value as Bool:
+      return NSNumber(value: value ? 1 : 0)
+    case let value as Int:
+      return NSNumber(value: value)
+    case let value as Double:
+      return NSNumber(value: value)
+    case let value as String:
+      if let intValue = Int(value) {
+        return NSNumber(value: intValue)
+      }
+      if let doubleValue = Double(value) {
+        return NSNumber(value: doubleValue)
+      }
+      return nil
+    default:
+      return nil
+    }
+  }
+
   /// 广告事件流处理器
   private class AdEventStreamHandler: NSObject, FlutterStreamHandler {
     /// 插件实例引用
@@ -398,6 +553,67 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
     func onCancel(withArguments arguments: Any?) -> FlutterError? {
       owner?.logEventSink = nil
       return nil
+    }
+  }
+
+  private final class GromorePrivacyProvider: NSObject, BUAdSDKPrivacyProvider {
+    private let options: [String: Any]
+
+    init(options: [String: Any]) {
+      self.options = options
+    }
+
+    func canUseLocation() -> Bool {
+      return readBool("canUseLocation") ?? true
+    }
+
+    func latitude() -> CLLocationDegrees {
+      return readDouble("latitude") ?? 0
+    }
+
+    func longitude() -> CLLocationDegrees {
+      return readDouble("longitude") ?? 0
+    }
+
+    func canUseWiFiBSSID() -> Bool {
+      return readBool("canUseWiFiBSSID") ?? true
+    }
+
+    func privacyConfig() -> [AnyHashable : Any]? {
+      return options["privacyConfig"] as? [AnyHashable: Any]
+    }
+
+    private func readBool(_ key: String) -> Bool? {
+      switch options[key] {
+      case let value as Bool:
+        return value
+      case let value as NSNumber:
+        return value.boolValue
+      case let value as String:
+        switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "true", "1", "yes":
+          return true
+        case "false", "0", "no":
+          return false
+        default:
+          return nil
+        }
+      default:
+        return nil
+      }
+    }
+
+    private func readDouble(_ key: String) -> Double? {
+      switch options[key] {
+      case let value as Double:
+        return value
+      case let value as NSNumber:
+        return value.doubleValue
+      case let value as String:
+        return Double(value)
+      default:
+        return nil
+      }
     }
   }
 }

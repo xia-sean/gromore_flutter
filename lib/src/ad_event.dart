@@ -5,6 +5,9 @@ enum GromoreAdEventType {
   /// 加载成功
   loaded,
 
+  /// 模板渲染完成（返回真实渲染尺寸）
+  rendered,
+
   /// 加载失败
   failed,
 
@@ -43,6 +46,8 @@ extension GromoreAdEventTypeValue on GromoreAdEventType {
     switch (this) {
       case GromoreAdEventType.loaded:
         return 'loaded';
+      case GromoreAdEventType.rendered:
+        return 'rendered';
       case GromoreAdEventType.failed:
         return 'failed';
       case GromoreAdEventType.error:
@@ -74,6 +79,9 @@ extension GromoreAdEventTypeValue on GromoreAdEventType {
       case 'loaded':
       case 'onAdLoaded':
         return GromoreAdEventType.loaded;
+      case 'rendered':
+      case 'onAdRendered':
+        return GromoreAdEventType.rendered;
       case 'failed':
         return GromoreAdEventType.failed;
       case 'error':
@@ -174,7 +182,8 @@ class GromoreAdEvent {
     if (eventType == GromoreAdEventType.rewarded || hasRewardFields) {
       return GromoreAdRewardEvent.fromMap(
         map,
-        adType: GromoreAdTypeValue.fromValue(adTypeValue) ?? GromoreAdType.native,
+        adType:
+            GromoreAdTypeValue.fromValue(adTypeValue) ?? GromoreAdType.native,
         eventType: eventType,
       );
     }
@@ -185,7 +194,8 @@ class GromoreAdEvent {
         errorMessage != null) {
       return GromoreAdErrorEvent(
         adId: map['adId']?.toString() ?? '',
-        adType: GromoreAdTypeValue.fromValue(adTypeValue) ?? GromoreAdType.native,
+        adType:
+            GromoreAdTypeValue.fromValue(adTypeValue) ?? GromoreAdType.native,
         eventType: eventType,
         placementId: map['placementId']?.toString(),
         errorCode: errorCode,
@@ -301,8 +311,8 @@ class GromoreAdRewardEvent extends GromoreAdEvent {
   }) {
     final String? rewardName = map['rewardName']?.toString();
     final int? rewardAmount = _parseInt(map['rewardAmount']);
-    final bool? rewardVerify = _parseBool(map['rewardVerify']) ??
-        _parseBool(map['isRewardValid']);
+    final bool? rewardVerify =
+        _parseBool(map['rewardVerify']) ?? _parseBool(map['isRewardValid']);
     final int? rewardType = _parseInt(map['rewardType']);
     final String? rewardId = map['rewardId']?.toString();
     final String? customData = map['customData']?.toString();

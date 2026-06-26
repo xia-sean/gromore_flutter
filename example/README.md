@@ -14,6 +14,10 @@ Android 端也默认不引入 Adapter（仅 GroMore 核心），可通过 `GM_AD
 - 也可用 `CSJM_DISABLE_REMOTE=1` 一键降级（等同 `GM_MODE=fixed`）。  
 - 若包含 AdMob（`admob`），iOS 必须在 `Info.plist` 配置 `GADApplicationIdentifier`，否则会直接崩溃。
 - 未引入的平台无需配置其 `Info.plist`/权限/系统能力；插件不会自动写入这些字段。
+- 若使用较老 Flutter 版本配合较新 Xcode（如 Xcode 26+）调试 iOS，建议在业务工程 `Info.plist` 显式补齐 `NSBonjourServices` 与 `NSLocalNetworkUsageDescription`，避免出现 `Info.plist: Could not extract value` 导致脚本阶段失败。
+- 示例工程已补入 ATT 文案、基础 `SKAdNetworkItems` 与 `PrivacyInfo.xcprivacy`；业务工程若集成更多 SDK，仍需把多方隐私条目合并进自己的 App 清单。
+- 示例工程现在演示 Android `manifest meta-data + res/values/gromore_config.xml` 原生自动初始化；这就是多进程推荐接入方式。
+- Android 插件库现在会自动合并基础权限与 `TTFileProvider`；示例工程保留的是应用侧附加配置，而不是重复声明基础项。
 
 **Android 选择部分 ADN（GM_ADNS）**
 - 在 `example/android/gradle.properties` 中添加：
@@ -91,7 +95,7 @@ cd ..
 flutter run
 ```
 
-运行后在应用内填写 AppId/AppName 与代码位，再进行加载/展示测试。
+运行后可直接填写代码位测试广告；Android 侧 AppId/AppName 已在 `example/android/app/src/main/AndroidManifest.xml` 与 `res/values/gromore_config.xml` 中配置，输入框留空即可。iOS 仍按页面输入值初始化。
 
 
 ## 1. 初始化
@@ -100,8 +104,6 @@ flutter run
 import 'package:gromore_flutter/gromore_flutter.dart';
 
 final config = GromoreConfig(
-  androidAppId: 'your_android_app_id',
-  androidAppName: 'your_android_app_name',
   iosAppId: 'your_ios_app_id',
   iosAppName: 'your_ios_app_name',
   debug: true,
@@ -117,9 +119,42 @@ final config = GromoreConfig(
     GromoreAdType.drawNative,
     GromoreAdType.banner,
   },
+  androidOptions: {
+    'privacy': {
+      'canUseLocation': false,
+      'canUseOaid': false,
+    },
+  },
+  iosOptions: {
+    'privacy': {
+      'canUseLocation': false,
+    },
+    'mediation': {
+      'limitPersonalAds': 1,
+    },
+  },
 );
 
 final result = await GromoreFlutter.instance.init(config);
+```
+
+Android 如需改示例 AppId/AppName，请修改：
+
+- `example/android/app/src/main/AndroidManifest.xml`
+- `example/android/app/src/main/res/values/gromore_config.xml`
+
+示例宿主还提供了一个现成的 Android `Application` 参考实现：
+
+- `example/android/app/src/main/kotlin/com/example/gromore_flutter_example/ExampleApplication.kt`
+
+如果你要模拟“隐私同意后再初始化”，可以把：
+
+- `example/android/app/src/main/res/values/gromore_config.xml` 中的 `gromore_android_auto_init`
+
+改成 `false`，然后在宿主原生 `Application` 或同意回调里调用：
+
+```kotlin
+GromoreFlutterNativeInit.initializeFromManifest(this)
 ```
 
 导出日志：
@@ -155,6 +190,7 @@ final subscription = GromoreFlutter.instance.listenAdEvents(
   adType: GromoreAdType.rewardVideo,
   callback: GromoreAdCallback(
     onLoaded: (e) => print('loaded: ${e.adId}'),
+    onRendered: (e) => print("rendered: ${e.data?['renderWidth']} x ${e.data?['renderHeight']}"),
     onFailed: (e) => print('failed: ${e.errorCode} ${e.errorMessage}'),
     onShown: (e) => print('shown'),
     onClicked: (e) => print('clicked'),
@@ -173,6 +209,10 @@ GromoreFlutter.instance.adEvents.listen((event) {
   print('event: ${event.eventType} ${event.adId}');
 });
 ```
+
+`rendered` 事件用于回传模板广告真实渲染尺寸，字段位于 `event.data`：
+- `renderWidth`
+- `renderHeight`
 
 ## 2.1 查看广告平台来源（ecpmInfo）
 
@@ -297,6 +337,11 @@ final drawId = await GromoreDraw.load(
   ),
 );
 ```
+
+> 当前 Flutter 插件优先展示模板/Express 信息流；若代码位实际返回自渲染信息流，会回退到插件内置的默认原生卡片样式。
+> `adCount` 会按官方范围限制在 `1~3`，但当前 Flutter 插件只会使用首条返回广告。
+> Android 原生信息流请求宽高遵循官方接口单位 `px`；Flutter 页面展示宽高仍使用逻辑像素，示例工程里已按 `dp * devicePixelRatio` 转换后再发起请求。
+> Draw 已改为走原生 SDK 的专用加载链路；若返回自渲染 draw，插件会回退到内置沉浸式默认样式。
 
 ### 3.6 Banner
 

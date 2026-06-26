@@ -75,30 +75,30 @@ android {
 
     dependencies {
         // GroMore 核心 SDK（官方 Maven）
-        implementation("com.pangle_beta.cn:mediation-sdk:7.4.1.4")
+        implementation("com.pangle_beta.cn:mediation-sdk:7.5.1.0")
         // GroMore 适配器（按 GM_ADNS 选择）
         if (GM_ADNS.contains("gdt")) {
-            implementation("com.pangle_beta.cn:mediation-gdt-adapter:4.662.1532.0")
+            implementation("com.pangle_beta.cn:mediation-gdt-adapter:4.670.1540.0")
         }
         if (GM_ADNS.contains("baidu")) {
-            implementation("com.pangle_beta.cn:mediation-baidu-adapter:9.423.3")
+            implementation("com.pangle_beta.cn:mediation-baidu-adapter:9.430.0")
         }
         if (GM_ADNS.contains("ks")) {
-            implementation("com.pangle_beta.cn:mediation-ks-adapter:4.11.20.1.0")
+            implementation("com.pangle_beta.cn:mediation-ks-adapter:4.12.20.1.0")
         }
         if (GM_ADNS.contains("admob")) {
-            implementation("com.pangle_beta.cn:mediation-admob-adapter:17.2.0.72")
+            implementation("com.pangle_beta.cn:mediation-admob-adapter:17.2.0.73")
         }
         if (GM_ADNS.contains("sigmob")) {
-            implementation("com.pangle_beta.cn:mediation-sigmob-adapter:4.25.2.0")
+            implementation("com.pangle_beta.cn:mediation-sigmob-adapter:4.25.9.0")
         }
 
         // GroMore 测试工具（Debug 专用）
-        debugImplementation("com.pangle_beta.cn:mediation-test-tools:7.4.1.4")
+        debugImplementation("com.pangle_beta.cn:mediation-test-tools:7.5.1.0")
         // 测试工具资源依赖（statusBarBackground 等）
         debugImplementation("androidx.coordinatorlayout:coordinatorlayout:1.2.0")
         // 编译期占位，避免 Release 编译缺失类
-        compileOnly("com.pangle_beta.cn:mediation-test-tools:7.4.1.4")
+        compileOnly("com.pangle_beta.cn:mediation-test-tools:7.5.1.0")
 
         // OkHttp（SDK 依赖）
         implementation("com.squareup.okhttp3:okhttp:3.12.1")

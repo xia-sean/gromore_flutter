@@ -5,6 +5,7 @@ class GromoreAdCallback {
   const GromoreAdCallback({
     this.onEvent,
     this.onLoaded,
+    this.onRendered,
     this.onFailed,
     this.onShown,
     this.onPresented,
@@ -21,6 +22,9 @@ class GromoreAdCallback {
 
   /// 加载成功
   final void Function(GromoreAdEvent event)? onLoaded;
+
+  /// 模板渲染完成（返回真实渲染尺寸）
+  final void Function(GromoreAdEvent event)? onRendered;
 
   /// 加载失败/错误
   final void Function(GromoreAdErrorEvent event)? onFailed;
@@ -55,6 +59,9 @@ class GromoreAdCallback {
     switch (event.eventType) {
       case GromoreAdEventType.loaded:
         onLoaded?.call(event);
+        break;
+      case GromoreAdEventType.rendered:
+        onRendered?.call(event);
         break;
       case GromoreAdEventType.failed:
       case GromoreAdEventType.error:

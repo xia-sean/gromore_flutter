@@ -1,3 +1,26 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-  package="com.gromore.flutter">
+  xmlns:tools="http://schemas.android.com/tools">
+
+  <uses-permission android:name="android.permission.INTERNET" />
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+  <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+
+  <application>
+    <provider
+      android:name="com.gromore.flutter.GromoreFlutterInitProvider"
+      android:authorities="${applicationId}.gromore_flutter.init"
+      android:exported="false"
+      android:initOrder="100" />
+
+    <provider
+      android:name="com.bytedance.sdk.openadsdk.TTFileProvider"
+      android:authorities="${applicationId}.TTFileProvider"
+      android:exported="false"
+      android:grantUriPermissions="true">
+      <meta-data
+        android:name="android.support.FILE_PROVIDER_PATHS"
+        android:resource="@xml/pangle_file_paths"
+        tools:replace="android:resource" />
+    </provider>
+  </application>
 </manifest>

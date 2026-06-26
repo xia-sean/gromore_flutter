@@ -1,3 +1,12 @@
+## Unreleased
+
+- 更新 GroMore SDK 版本：iOS `7.5.0.4`，Android `7.5.1.0`。
+- Android 插件自动合并基础权限与 `TTFileProvider`，减少宿主工程重复配置。
+- Android 新增 `manifest meta-data` 原生初始化能力，支持通过资源文件配置 AppId/AppName，并支持多进程启动时自动初始化。
+- Android 新增宿主原生公开初始化 API，支持隐私同意后手动初始化。
+- 新增 Android 宿主接入模板文档，覆盖单进程、多进程与隐私同意后初始化三种场景。
+- 更新 Android 固定 Adapter 版本到官方文档对应组合。
+
 ## 2.1.8
 
 - 更新 GroMore SDK 版本：iOS `7.4.0.1`，Android `7.4.1.4`。

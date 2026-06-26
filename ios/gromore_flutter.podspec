@@ -16,12 +16,12 @@ GroMore Flutter plugin for Android/iOS (Pangle mediation).
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
   # GroMore 依赖（穿山甲 iOS 融合 SDK）
-  s.dependency 'Ads-CN-Beta', '7.4.0.1'
+  s.dependency 'Ads-CN-Beta', '7.5.0.4'
   s.subspec 'BUAdSDK' do |cs|
-    cs.dependency 'Ads-CN-Beta/BUAdSDK', '7.4.0.1'
+    cs.dependency 'Ads-CN-Beta/BUAdSDK', '7.5.0.4'
   end
   s.subspec 'CSJMediation' do |cs|
-    cs.dependency 'Ads-CN-Beta/CSJMediation', '7.4.0.1'
+    cs.dependency 'Ads-CN-Beta/CSJMediation', '7.5.0.4'
   end
   s.static_framework = true
   s.platform = :ios, '12.0'
@@ -30,9 +30,7 @@ GroMore Flutter plugin for Android/iOS (Pangle mediation).
   s.pod_target_xcconfig = { 'DEFINES_MODULE' => 'YES', 'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'i386' }
   s.swift_version = '5.0'
 
-  # If your plugin requires a privacy manifest, for example if it uses any
-  # required reason APIs, update the PrivacyInfo.xcprivacy file to describe your
-  # plugin's privacy impact, and then uncomment this line. For more information,
-  # see https://developer.apple.com/documentation/bundleresources/privacy_manifest_files
-  # s.resource_bundles = {'gromore_flutter_privacy' => ['Resources/PrivacyInfo.xcprivacy']}
+  # Ship the plugin privacy manifest so the pod output contains the SDK's
+  # required reason API declaration on iOS 17+.
+  s.resource_bundles = { 'gromore_flutter_privacy' => ['Resources/PrivacyInfo.xcprivacy'] }
 end

@@ -2,13 +2,19 @@ package com.gromore.flutter
 
 import android.app.Activity
 import android.content.Context
+import android.graphics.BitmapFactory
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.TypedValue
+import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
+import android.widget.ImageView
+import android.widget.TextView
 import com.bytedance.sdk.openadsdk.AdSlot
 import com.bytedance.sdk.openadsdk.CSJAdError
 import com.bytedance.sdk.openadsdk.CSJSplashAd
@@ -16,14 +22,18 @@ import com.bytedance.sdk.openadsdk.CSJSplashCloseType
 import com.bytedance.sdk.openadsdk.TTAdConstant
 import com.bytedance.sdk.openadsdk.TTAdDislike
 import com.bytedance.sdk.openadsdk.TTAdNative
+import com.bytedance.sdk.openadsdk.TTAppDownloadListener
 import com.bytedance.sdk.openadsdk.TTAdSdk
+import com.bytedance.sdk.openadsdk.TTDrawFeedAd
 import com.bytedance.sdk.openadsdk.TTFeedAd
 import com.bytedance.sdk.openadsdk.TTFullScreenVideoAd
 import com.bytedance.sdk.openadsdk.TTNativeAd
 import com.bytedance.sdk.openadsdk.TTNativeExpressAd
 import com.bytedance.sdk.openadsdk.TTRewardVideoAd
+import com.bytedance.sdk.openadsdk.mediation.ad.MediationViewBinder
 import com.bytedance.sdk.openadsdk.mediation.ad.MediationExpressRenderListener
 import com.bytedance.sdk.openadsdk.mediation.manager.MediationAdEcpmInfo
+import java.net.URL
 import java.util.UUID
 
 /**
@@ -75,7 +85,7 @@ internal class GromoreAdManager(
       "interstitial" -> loadFullScreenAd(activity, adId, placementId, requestMap, adType)
       "banner" -> loadBannerAd(activity, adId, placementId, requestMap)
       "native" -> loadFeedAd(activity, adId, adType, placementId, requestMap)
-      "draw_native" -> loadFeedAd(activity, adId, adType, placementId, requestMap)
+      "draw_native" -> loadDrawAd(activity, adId, adType, placementId, requestMap)
       else -> emitAdError(adId, adType, placementId, "unknown_ad_type", "Unknown adType: $adType")
     }
   }
@@ -97,6 +107,7 @@ internal class GromoreAdManager(
       is FullScreenAdHolder -> showFullScreenAd(holder)
       is BannerAdHolder -> emitLog("info", "showAd for banner handled by view", "ad")
       is FeedAdHolder -> emitLog("info", "showAd for feed handled by view", "ad")
+      is DrawAdHolder -> emitLog("info", "showAd for draw handled by view", "ad")
     }
   }
 
@@ -113,6 +124,7 @@ internal class GromoreAdManager(
       is FullScreenAdHolder -> holder.ad?.mediationManager?.destroy()
       is BannerAdHolder -> holder.ad?.destroy()
       is FeedAdHolder -> holder.ad?.destroy()
+      is DrawAdHolder -> holder.ad?.destroy()
     }
     holder.container?.removeAllViews()
     emitLog("info", "disposeAd: $adId", "ad")
@@ -145,6 +157,7 @@ internal class GromoreAdManager(
     when (holder) {
       is BannerAdHolder -> attachBannerView(holder)
       is FeedAdHolder -> attachFeedView(holder)
+      is DrawAdHolder -> attachDrawView(holder)
       else -> emitLog("warn", "attachAdView unsupported for adType=$adType", "ad")
     }
   }
@@ -531,7 +544,8 @@ internal class GromoreAdManager(
       }
 
       override fun onRenderSuccess(view: View?, width: Float, height: Float) {
-        // 融合模板 Banner 不需要主动 render
+        emitLog("info", "banner render success: ${holder.adId}, width=$width, height=$height", "ad")
+        emitAdRendered(holder, width, height)
       }
     })
     ad.setDislikeCallback(activity, object : TTAdDislike.DislikeInteractionCallback {
@@ -574,7 +588,14 @@ internal class GromoreAdManager(
   ) {
     val width = readInt(requestMap, "width", activity.resources.displayMetrics.widthPixels)
     val height = readInt(requestMap, "height", 720)
-    val adCount = readInt(requestMap, "adCount", 1)
+    val requestedAdCount = readInt(requestMap, "adCount", 1)
+    val adCount = requestedAdCount.coerceIn(1, 3)
+    if (requestedAdCount != adCount) {
+      emitLog("warn", "feed adCount out of range, clamped from $requestedAdCount to $adCount", "ad")
+    }
+    if (adCount > 1) {
+      emitLog("info", "feed requested $adCount ads, current Flutter plugin uses the first returned ad only", "ad")
+    }
     val adSlot = AdSlot.Builder()
       .setCodeId(placementId)
       .setImageAcceptedSize(width, height)
@@ -598,6 +619,7 @@ internal class GromoreAdManager(
           return
         }
         holder.ad = ad
+        bindFeedDislikeCallback(activity, holder, ad)
         emitLog("info", "feed load success: $adId", "ad")
         emitAdLoaded(holder)
         if (ad.mediationManager.isExpress) {
@@ -605,6 +627,7 @@ internal class GromoreAdManager(
             override fun onRenderSuccess(view: View?, width: Float, height: Float, isExpress: Boolean) {
               holder.renderedView = ad.adView
               emitLog("info", "feed render success: $adId", "ad")
+              emitFeedRendered(holder, width, height)
               attachFeedView(holder)
             }
 
@@ -625,7 +648,8 @@ internal class GromoreAdManager(
           ad.setExpressRenderListener(renderListener)
           ad.render()
         } else {
-          emitLog("warn", "feed ad is native render, current plugin only supports express by default", "ad")
+          emitLog("info", "feed native render detected, using built-in native feed view", "ad")
+          attachFeedView(holder)
         }
       }
     }
@@ -633,14 +657,100 @@ internal class GromoreAdManager(
     adNative.loadFeedAd(adSlot, listener)
   }
 
+  /** 加载 Draw 信息流广告 */
+  private fun loadDrawAd(
+    activity: Activity,
+    adId: String,
+    adType: String,
+    placementId: String,
+    requestMap: Map<*, *>
+  ) {
+    val width = readInt(requestMap, "width", activity.resources.displayMetrics.widthPixels)
+    val height = readInt(requestMap, "height", activity.resources.displayMetrics.heightPixels)
+    val requestedAdCount = readInt(requestMap, "adCount", 1)
+    val adCount = requestedAdCount.coerceIn(1, 3)
+    if (requestedAdCount != adCount) {
+      emitLog("warn", "draw adCount out of range, clamped from $requestedAdCount to $adCount", "ad")
+    }
+    if (adCount > 1) {
+      emitLog("info", "draw requested $adCount ads, current Flutter plugin uses the first returned ad only", "ad")
+    }
+    val adSlot = AdSlot.Builder()
+      .setCodeId(placementId)
+      .setImageAcceptedSize(width, height)
+      .setAdCount(adCount)
+      .build()
+
+    val adNative = TTAdSdk.getAdManager().createAdNative(activity)
+    val holder = DrawAdHolder(adId, placementId, adType)
+    adHolders[adId] = holder
+
+    val listener = object : TTAdNative.DrawFeedAdListener {
+      override fun onError(code: Int, message: String?) {
+        emitLog("error", "draw load fail: $adId, code=$code, msg=$message", "ad")
+        emitAdError(adId, holder.adType, placementId, code.toString(), message)
+      }
+
+      override fun onDrawFeedAdLoad(ads: MutableList<TTDrawFeedAd>?) {
+        val ad = ads?.firstOrNull()
+        if (ad == null) {
+          emitAdError(adId, holder.adType, placementId, "empty_ad", "No draw ad returned.")
+          return
+        }
+        holder.ad = ad
+        bindFeedDislikeCallback(activity, holder, ad)
+        emitLog("info", "draw load success: $adId", "ad")
+        emitAdLoaded(holder)
+        if (ad.mediationManager.isExpress) {
+          val renderListener = object : MediationExpressRenderListener {
+            override fun onRenderSuccess(view: View?, width: Float, height: Float, isExpress: Boolean) {
+              holder.renderedView = ad.adView
+              emitLog("info", "draw render success: $adId", "ad")
+              emitDrawRendered(holder, width, height)
+              attachDrawView(holder)
+            }
+
+            override fun onRenderFail(view: View?, msg: String?, code: Int) {
+              emitLog("error", "draw render fail: $adId, code=$code, msg=$msg", "ad")
+              emitAdError(adId, holder.adType, placementId, code.toString(), msg)
+            }
+
+            override fun onAdClick() {
+              emitAdClicked(holder)
+            }
+
+            override fun onAdShow() {
+              emitAdShown(holder)
+            }
+          }
+          holder.renderListener = renderListener
+          ad.setExpressRenderListener(renderListener)
+          ad.render()
+        } else {
+          emitLog("info", "draw native render detected, using built-in native draw view", "ad")
+          attachDrawView(holder)
+        }
+      }
+    }
+    holder.loadListener = listener
+    adNative.loadDrawFeedAd(adSlot, listener)
+  }
+
   /** 绑定信息流视图 */
   private fun attachFeedView(holder: FeedAdHolder) {
     val ad = holder.ad ?: return
-    if (!ad.mediationManager.isExpress) {
-      emitLog("warn", "attachFeedView skipped: native render not supported by default", "ad")
-      return
+    val view = if (ad.mediationManager.isExpress) {
+      holder.renderedView ?: ad.adView
+    } else {
+      val activity = activityProvider()
+      if (activity == null) {
+        emitLog("warn", "attachFeedView failed: missing activity for native render", "ad")
+        return
+      }
+      holder.renderedView ?: buildNativeFeedView(activity, holder, ad).also {
+        holder.renderedView = it
+      }
     }
-    val view = holder.renderedView ?: ad.adView
     if (view != null) {
       view.removeFromParent()
       holder.container?.removeAllViews()
@@ -651,7 +761,319 @@ internal class GromoreAdManager(
           ViewGroup.LayoutParams.MATCH_PARENT
         )
       )
+      if (!holder.renderEventSent) {
+        view.post {
+          emitFeedRendered(holder, view.width.toFloat(), view.height.toFloat())
+        }
+      }
     }
+  }
+
+  /** 绑定 Draw 视图 */
+  private fun attachDrawView(holder: DrawAdHolder) {
+    val ad = holder.ad ?: return
+    val view = if (ad.mediationManager.isExpress) {
+      holder.renderedView ?: ad.adView
+    } else {
+      val activity = activityProvider()
+      if (activity == null) {
+        emitLog("warn", "attachDrawView failed: missing activity for native render", "ad")
+        return
+      }
+      holder.renderedView ?: buildNativeDrawView(activity, holder, ad).also {
+        holder.renderedView = it
+      }
+    }
+    if (view != null) {
+      view.removeFromParent()
+      holder.container?.removeAllViews()
+      holder.container?.addView(
+        view,
+        FrameLayout.LayoutParams(
+          ViewGroup.LayoutParams.MATCH_PARENT,
+          ViewGroup.LayoutParams.MATCH_PARENT
+        )
+      )
+      if (!holder.renderEventSent) {
+        view.post {
+          emitDrawRendered(holder, view.width.toFloat(), view.height.toFloat())
+        }
+      }
+    }
+  }
+
+  /** 绑定信息流 dislike 回调 */
+  private fun bindFeedDislikeCallback(activity: Activity, holder: GromoreAdHolder, ad: TTNativeAd) {
+    ad.setDislikeCallback(activity, object : TTAdDislike.DislikeInteractionCallback {
+      override fun onShow() {
+        emitLog("info", "feed dislike show: ${holder.adId}", "ad")
+      }
+
+      override fun onSelected(position: Int, value: String?, enforce: Boolean) {
+        emitLog("info", "feed dislike selected: ${holder.adId}", "ad")
+        emitAdClosed(holder, mapOf("dislike" to true, "value" to value))
+        holder.container?.removeAllViews()
+      }
+
+      override fun onCancel() {
+        emitLog("info", "feed dislike cancel: ${holder.adId}", "ad")
+      }
+    })
+  }
+
+  /** 内置默认自渲染信息流视图 */
+  private fun buildNativeFeedView(activity: Activity, holder: FeedAdHolder, ad: TTFeedAd): View {
+    val root = LayoutInflater.from(activity).inflate(R.layout.gromore_feed_native, null, false)
+    val titleView = root.findViewById<TextView>(R.id.gromore_feed_title)
+    val descView = root.findViewById<TextView>(R.id.gromore_feed_desc)
+    val sourceView = root.findViewById<TextView>(R.id.gromore_feed_source)
+    val ctaView = root.findViewById<TextView>(R.id.gromore_feed_cta)
+    val iconView = root.findViewById<ImageView>(R.id.gromore_feed_icon)
+    val mainImageView = root.findViewById<ImageView>(R.id.gromore_feed_main_image)
+    val mediaView = root.findViewById<FrameLayout>(R.id.gromore_feed_media)
+    val badgeView = root.findViewById<TextView>(R.id.gromore_feed_ad_badge)
+    val closeView = root.findViewById<TextView>(R.id.gromore_feed_close)
+
+    titleView.text = ad.title.orEmpty().ifBlank { "广告推荐" }
+    descView.text = ad.description.orEmpty().ifBlank { "精彩内容，点击查看详情" }
+    sourceView.text = ad.source.orEmpty().ifBlank { "广告" }
+    ctaView.text = ad.buttonText.orEmpty().ifBlank { defaultCallToAction(ad) }
+
+    badgeView.background = roundedDrawable(
+      backgroundColor = Color.parseColor("#F3F4F6"),
+      strokeColor = Color.parseColor("#E5E7EB"),
+      radiusDp = 10f
+    )
+    ctaView.background = roundedDrawable(
+      backgroundColor = Color.parseColor("#2563EB"),
+      strokeColor = Color.TRANSPARENT,
+      radiusDp = 14f
+    )
+
+    val icon = ad.icon
+    if (icon?.isValid == true) {
+      iconView.visibility = View.VISIBLE
+      loadImageInto(icon.imageUrl, iconView)
+    } else {
+      iconView.visibility = View.GONE
+    }
+
+    val mainImage = ad.imageList?.firstOrNull()
+    val isVideoLike = ad.videoDuration > 0 || ad.getVideoCoverImage()?.isValid == true
+    if (isVideoLike) {
+      mediaView.visibility = View.VISIBLE
+      mainImageView.visibility = View.GONE
+    } else if (mainImage?.isValid == true) {
+      mediaView.visibility = View.VISIBLE
+      mainImageView.visibility = View.VISIBLE
+      loadImageInto(mainImage.imageUrl, mainImageView)
+    } else {
+      mediaView.visibility = View.GONE
+    }
+
+    closeView.setOnClickListener {
+      ad.getDislikeDialog(activity)?.showDislikeDialog()
+    }
+
+    ad.setActivityForDownloadApp(activity)
+    bindNativeFeedDownloadListener(ctaView, ad)
+
+    val clickViews = mutableListOf<View>(root, titleView, descView, sourceView, ctaView)
+    val creativeViews = mutableListOf<View>(ctaView)
+    if (iconView.visibility == View.VISIBLE) {
+      clickViews.add(iconView)
+    }
+    if (mediaView.visibility == View.VISIBLE) {
+      clickViews.add(mediaView)
+      creativeViews.add(mediaView)
+    }
+    if (mainImageView.visibility == View.VISIBLE) {
+      clickViews.add(mainImageView)
+      creativeViews.add(mainImageView)
+    }
+
+    val binder = MediationViewBinder.Builder(R.layout.gromore_feed_native)
+      .titleId(R.id.gromore_feed_title)
+      .descriptionTextId(R.id.gromore_feed_desc)
+      .sourceId(R.id.gromore_feed_source)
+      .callToActionId(R.id.gromore_feed_cta)
+      .iconImageId(R.id.gromore_feed_icon)
+      .mainImageId(R.id.gromore_feed_main_image)
+      .mediaViewIdId(R.id.gromore_feed_media)
+      .logoLayoutId(R.id.gromore_feed_ad_badge)
+      .build()
+
+    ad.registerViewForInteraction(
+      activity,
+      root as ViewGroup,
+      clickViews,
+      creativeViews,
+      emptyList(),
+      object : TTNativeAd.AdInteractionListener {
+        override fun onAdClicked(view: View, nativeAd: TTNativeAd) {
+          emitAdClicked(holder)
+        }
+
+        override fun onAdCreativeClick(view: View, nativeAd: TTNativeAd) {
+          emitAdClicked(holder)
+        }
+
+        override fun onAdShow(nativeAd: TTNativeAd) {
+          emitAdShown(holder)
+        }
+      },
+      binder
+    )
+    return root
+  }
+
+  /** 内置默认 Draw 自渲染视图 */
+  private fun buildNativeDrawView(activity: Activity, holder: DrawAdHolder, ad: TTDrawFeedAd): View {
+    val root = LayoutInflater.from(activity).inflate(R.layout.gromore_draw_native, null, false)
+    val titleView = root.findViewById<TextView>(R.id.gromore_draw_title)
+    val descView = root.findViewById<TextView>(R.id.gromore_draw_desc)
+    val sourceView = root.findViewById<TextView>(R.id.gromore_draw_source)
+    val ctaView = root.findViewById<TextView>(R.id.gromore_draw_cta)
+    val mediaView = root.findViewById<FrameLayout>(R.id.gromore_draw_media)
+    val mainImageView = root.findViewById<ImageView>(R.id.gromore_draw_main_image)
+
+    titleView.text = ad.title.orEmpty().ifBlank { "精彩广告内容" }
+    descView.text = ad.description.orEmpty().ifBlank { "上下滑动查看更多精彩内容" }
+    sourceView.text = ad.source.orEmpty().ifBlank { "广告" }
+    ctaView.text = ad.buttonText.orEmpty().ifBlank { defaultCallToAction(ad) }
+    ctaView.background = roundedDrawable(
+      backgroundColor = Color.parseColor("#2563EB"),
+      strokeColor = Color.TRANSPARENT,
+      radiusDp = 18f
+    )
+
+    val mainImage = ad.imageList?.firstOrNull()
+    val isVideoLike = ad.videoDuration > 0 || ad.getVideoCoverImage()?.isValid == true
+    if (isVideoLike) {
+      mainImageView.visibility = View.GONE
+    } else if (mainImage?.isValid == true) {
+      mainImageView.visibility = View.VISIBLE
+      loadImageInto(mainImage.imageUrl, mainImageView)
+    } else {
+      mainImageView.visibility = View.GONE
+    }
+
+    ad.setActivityForDownloadApp(activity)
+    bindNativeFeedDownloadListener(ctaView, ad)
+
+    val clickViews = mutableListOf<View>(root, mediaView, ctaView, titleView, descView)
+    val creativeViews = mutableListOf<View>(mediaView, ctaView)
+    ad.registerViewForInteraction(
+      mediaView as ViewGroup,
+      clickViews,
+      creativeViews,
+      object : TTNativeAd.AdInteractionListener {
+        override fun onAdClicked(view: View, nativeAd: TTNativeAd) {
+          emitAdClicked(holder)
+        }
+
+        override fun onAdCreativeClick(view: View, nativeAd: TTNativeAd) {
+          emitAdClicked(holder)
+        }
+
+        override fun onAdShow(nativeAd: TTNativeAd) {
+          emitAdShown(holder)
+        }
+      }
+    )
+    return root
+  }
+
+  /** 原生自渲染下载按钮状态联动 */
+  private fun bindNativeFeedDownloadListener(ctaView: TextView, ad: TTNativeAd) {
+    ad.setDownloadListener(object : TTAppDownloadListener {
+      override fun onIdle() {
+        ctaView.post { ctaView.text = ad.buttonText.orEmpty().ifBlank { defaultCallToAction(ad) } }
+      }
+
+      override fun onDownloadActive(totalBytes: Long, currBytes: Long, fileName: String?, appName: String?) {
+        val progress = if (totalBytes > 0) ((currBytes * 100) / totalBytes).toInt() else 0
+        ctaView.post { ctaView.text = "下载中 $progress%" }
+      }
+
+      override fun onDownloadPaused(totalBytes: Long, currBytes: Long, fileName: String?, appName: String?) {
+        ctaView.post { ctaView.text = "继续下载" }
+      }
+
+      override fun onDownloadFailed(totalBytes: Long, currBytes: Long, fileName: String?, appName: String?) {
+        ctaView.post { ctaView.text = "重新下载" }
+      }
+
+      override fun onDownloadFinished(totalBytes: Long, fileName: String?, appName: String?) {
+        ctaView.post { ctaView.text = "立即安装" }
+      }
+
+      override fun onInstalled(fileName: String?, appName: String?) {
+        ctaView.post { ctaView.text = "立即打开" }
+      }
+    })
+  }
+
+  /** 加载远程图片 */
+  private fun loadImageInto(url: String?, imageView: ImageView) {
+    if (url.isNullOrBlank()) {
+      return
+    }
+    Thread {
+      runCatching {
+        URL(url).openStream().use { input ->
+          BitmapFactory.decodeStream(input)
+        }
+      }.onSuccess { bitmap ->
+        if (bitmap != null) {
+          imageView.post { imageView.setImageBitmap(bitmap) }
+        }
+      }
+    }.start()
+  }
+
+  /** 默认 CTA 文案 */
+  private fun defaultCallToAction(ad: TTNativeAd): String {
+    return when (ad.interactionType) {
+      TTAdConstant.INTERACTION_TYPE_DOWNLOAD -> "立即下载"
+      TTAdConstant.INTERACTION_TYPE_LANDING_PAGE -> "查看详情"
+      TTAdConstant.INTERACTION_TYPE_BROWSER -> "立即查看"
+      else -> "立即查看"
+    }
+  }
+
+  /** 圆角背景 */
+  private fun roundedDrawable(backgroundColor: Int, strokeColor: Int, radiusDp: Float): GradientDrawable {
+    return GradientDrawable().apply {
+      shape = GradientDrawable.RECTANGLE
+      cornerRadius = TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP,
+        radiusDp,
+        appContext.resources.displayMetrics
+      )
+      setColor(backgroundColor)
+      if (strokeColor != Color.TRANSPARENT) {
+        setStroke(dpToPx(appContext, 1f), strokeColor)
+      }
+    }
+  }
+
+  /** 信息流渲染完成事件（避免重复上报） */
+  private fun emitFeedRendered(holder: FeedAdHolder, width: Float, height: Float) {
+    if (holder.renderEventSent) {
+      return
+    }
+    holder.renderEventSent = true
+    emitAdRendered(holder, width, height)
+  }
+
+  /** Draw 渲染完成事件（避免重复上报） */
+  private fun emitDrawRendered(holder: DrawAdHolder, width: Float, height: Float) {
+    if (holder.renderEventSent) {
+      return
+    }
+    holder.renderEventSent = true
+    emitAdRendered(holder, width, height)
   }
 
   /** 广告加载成功事件 */
@@ -680,6 +1102,22 @@ internal class GromoreAdManager(
         "eventType" to "shown",
         "placementId" to holder.placementId,
         "data" to data
+      )
+    )
+  }
+
+  /** 广告模板渲染完成事件（返回真实渲染尺寸） */
+  private fun emitAdRendered(holder: GromoreAdHolder, width: Float, height: Float) {
+    postAdEvent(
+      mapOf(
+        "adId" to holder.adId,
+        "adType" to holder.adType,
+        "eventType" to "rendered",
+        "placementId" to holder.placementId,
+        "data" to mapOf(
+          "renderWidth" to width.toDouble(),
+          "renderHeight" to height.toDouble()
+        )
       )
     )
   }
@@ -776,6 +1214,7 @@ internal class GromoreAdManager(
       is FullScreenAdHolder -> ad?.mediationManager?.showEcpm
       is BannerAdHolder -> ad?.mediationManager?.showEcpm
       is FeedAdHolder -> ad?.mediationManager?.showEcpm
+      is DrawAdHolder -> ad?.mediationManager?.showEcpm
     }
     if (info == null) {
       return null
@@ -908,5 +1347,19 @@ internal class GromoreAdManager(
     var loadListener: TTAdNative.FeedAdListener? = null
     var renderListener: MediationExpressRenderListener? = null
     var renderedView: View? = null
+    var renderEventSent: Boolean = false
+  }
+
+  /** Draw 信息流广告实例 */
+  internal class DrawAdHolder(
+    adId: String,
+    placementId: String,
+    override val adType: String = "draw_native"
+  ) : GromoreAdHolder(adId, placementId) {
+    var ad: TTDrawFeedAd? = null
+    var loadListener: TTAdNative.DrawFeedAdListener? = null
+    var renderListener: MediationExpressRenderListener? = null
+    var renderedView: View? = null
+    var renderEventSent: Boolean = false
   }
 }

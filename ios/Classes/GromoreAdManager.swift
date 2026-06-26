@@ -50,7 +50,7 @@ final class GromoreAdManager: NSObject {
     case "native":
       loadFeedAd(adId: adId, adType: adType, placementId: placementId, request: request)
     case "draw_native":
-      loadFeedAd(adId: adId, adType: adType, placementId: placementId, request: request)
+      loadDrawAd(adId: adId, adType: adType, placementId: placementId, request: request)
     default:
       emitAdError(adId: adId, adType: adType, placementId: placementId, errorCode: "unknown_ad_type", errorMessage: "Unknown adType: \(adType)")
     }
@@ -247,9 +247,24 @@ final class GromoreAdManager: NSObject {
   private func loadFeedAd(adId: String, adType: String, placementId: String, request: [String: Any]) {
     let width = CGFloat(readInt(request: request, key: "width", fallback: Int(UIScreen.main.bounds.size.width)))
     let height = CGFloat(readInt(request: request, key: "height", fallback: 400))
-    let count = readInt(request: request, key: "adCount", fallback: 1)
+    let requestedCount = readInt(request: request, key: "adCount", fallback: 1)
+    let count = max(1, min(requestedCount, 3))
+    if requestedCount != count {
+      emitLog("warn", "feed adCount out of range, clamped from \(requestedCount) to \(count)", "ad")
+    }
+    if count > 1 {
+      emitLog("info", "feed requested \(count) ads, current Flutter plugin uses the first returned ad only", "ad")
+    }
+    guard let rootVC = topViewController() else {
+      emitAdError(adId: adId, adType: adType, placementId: placementId, errorCode: "no_root_view_controller", errorMessage: "Feed rootViewController is nil.")
+      return
+    }
     let slot = BUAdSlot()
     slot.id = placementId
+    let imageSize = BUSize()
+    imageSize.width = max(1, Int(width))
+    imageSize.height = max(1, Int(height))
+    slot.imgSize = imageSize
     slot.adSize = CGSize(width: width, height: height)
     if let muted = readBool(request: request, key: "muted") {
       slot.mediation.mutedIfCan = muted
@@ -258,7 +273,47 @@ final class GromoreAdManager: NSObject {
     let adsManager = BUNativeAdsManager(slot: slot)
     let delegate = FeedDelegate(manager: self, adId: adId, adType: adType, placementId: placementId)
     adsManager.delegate = delegate
-    adsManager.mediation?.rootViewController = topViewController()
+    adsManager.mediation?.rootViewController = rootVC
+
+    let holder = FeedAdHolder(adId: adId, placementId: placementId, adType: adType)
+    holder.adsManager = adsManager
+    holder.delegate = delegate
+    adHolders[adId] = holder
+
+    adsManager.loadAdData(withCount: count)
+  }
+
+  private func loadDrawAd(adId: String, adType: String, placementId: String, request: [String: Any]) {
+    let width = CGFloat(readInt(request: request, key: "width", fallback: Int(UIScreen.main.bounds.size.width)))
+    let height = CGFloat(readInt(request: request, key: "height", fallback: Int(UIScreen.main.bounds.size.height)))
+    let requestedCount = readInt(request: request, key: "adCount", fallback: 1)
+    let count = max(1, min(requestedCount, 3))
+    if requestedCount != count {
+      emitLog("warn", "draw adCount out of range, clamped from \(requestedCount) to \(count)", "ad")
+    }
+    if count > 1 {
+      emitLog("info", "draw requested \(count) ads, current Flutter plugin uses the first returned ad only", "ad")
+    }
+    guard let rootVC = topViewController() else {
+      emitAdError(adId: adId, adType: adType, placementId: placementId, errorCode: "no_root_view_controller", errorMessage: "Draw rootViewController is nil.")
+      return
+    }
+    let slot = BUAdSlot()
+    slot.id = placementId
+    slot.adType = .drawVideo
+    let imageSize = BUSize()
+    imageSize.width = max(1, Int(width))
+    imageSize.height = max(1, Int(height))
+    slot.imgSize = imageSize
+    slot.adSize = CGSize(width: width, height: height)
+    if let muted = readBool(request: request, key: "muted") {
+      slot.mediation.mutedIfCan = muted
+    }
+
+    let adsManager = BUNativeAdsManager(slot: slot)
+    let delegate = FeedDelegate(manager: self, adId: adId, adType: adType, placementId: placementId)
+    adsManager.delegate = delegate
+    adsManager.mediation?.rootViewController = rootVC
 
     let holder = FeedAdHolder(adId: adId, placementId: placementId, adType: adType)
     holder.adsManager = adsManager
@@ -281,6 +336,10 @@ final class GromoreAdManager: NSObject {
 
   private func showRewardAd(holder: RewardAdHolder) {
     guard let ad = holder.rewardedAd else { return }
+    if ad.mediation?.isReady != true {
+      emitAdError(adId: holder.adId, adType: holder.adType, placementId: holder.placementId, errorCode: "not_ready", errorMessage: "Reward ad is not ready.")
+      return
+    }
     guard let rootVC = topViewController() else {
       emitLog("error", "showRewardAd failed: rootViewController is nil", "ad")
       return
@@ -290,6 +349,10 @@ final class GromoreAdManager: NSObject {
 
   private func showFullScreenAd(holder: FullScreenAdHolder) {
     guard let ad = holder.fullscreenAd else { return }
+    if ad.mediation?.isReady != true {
+      emitAdError(adId: holder.adId, adType: holder.adType, placementId: holder.placementId, errorCode: "not_ready", errorMessage: "FullScreen ad is not ready.")
+      return
+    }
     guard let rootVC = topViewController() else {
       emitLog("error", "showFullScreenAd failed: rootViewController is nil", "ad")
       return
@@ -306,17 +369,226 @@ final class GromoreAdManager: NSObject {
   }
 
   private func attachFeedView(holder: FeedAdHolder, width: CGFloat, height: CGFloat) {
-    guard let nativeAd = holder.nativeAd else { return }
-    if nativeAd.mediation?.isExpressAd != true {
-      emitLog("warn", "feed ad is native render, current plugin only supports express by default", "ad")
-      return
-    }
     guard let container = holder.container else { return }
-    guard let canvasView = nativeAd.mediation?.canvasView else { return }
-    canvasView.frame = container.bounds
-    canvasView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    guard let nativeAd = holder.nativeAd,
+          let canvasView = nativeAd.mediation?.canvasView else { return }
+    let targetSize = CGSize(
+      width: container.bounds.width > 0 ? container.bounds.width : width,
+      height: container.bounds.height > 0 ? container.bounds.height : height
+    )
+    if nativeAd.mediation?.isExpressAd == true {
+      canvasView.frame = CGRect(origin: .zero, size: targetSize)
+      canvasView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    } else {
+      if holder.adType == "draw_native" {
+        configureNativeDrawCanvasView(nativeAd: nativeAd, canvasView: canvasView, size: targetSize)
+      } else {
+        configureNativeCanvasView(nativeAd: nativeAd, canvasView: canvasView, size: targetSize)
+      }
+    }
     container.subviews.forEach { $0.removeFromSuperview() }
     container.addSubview(canvasView)
+    if !holder.renderEventSent {
+      holder.renderEventSent = true
+      let renderSize = canvasView.bounds.size
+      emitAdRendered(
+        adId: holder.adId,
+        adType: holder.adType,
+        placementId: holder.placementId,
+        width: renderSize.width,
+        height: renderSize.height
+      )
+    }
+  }
+
+  private func configureNativeCanvasView(nativeAd: BUNativeAd, canvasView: BUMCanvasView, size: CGSize) {
+    let width = max(size.width, 1)
+    let height = max(size.height, 1)
+    canvasView.frame = CGRect(origin: .zero, size: CGSize(width: width, height: height))
+    canvasView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    canvasView.backgroundColor = .white
+    canvasView.layer.cornerRadius = 12
+    canvasView.clipsToBounds = true
+    canvasView.subviews.forEach { $0.removeFromSuperview() }
+
+    let padding: CGFloat = 12
+    let iconSize: CGFloat = 40
+    let buttonHeight: CGFloat = 34
+    let contentWidth = width - padding * 2
+
+    let titleLabel = canvasView.titleLabel
+    titleLabel.text = nativeAd.data?.adTitle ?? "广告推荐"
+    titleLabel.font = .boldSystemFont(ofSize: 16)
+    titleLabel.textColor = UIColor(red: 0.12, green: 0.16, blue: 0.22, alpha: 1)
+    titleLabel.numberOfLines = 2
+
+    let descLabel = canvasView.descLabel
+    descLabel.text = nativeAd.data?.adDescription ?? "精彩内容，点击查看详情"
+    descLabel.font = .systemFont(ofSize: 14)
+    descLabel.textColor = UIColor(red: 0.29, green: 0.33, blue: 0.39, alpha: 1)
+    descLabel.numberOfLines = 2
+
+    let sourceLabel = UILabel(frame: CGRect(x: padding + iconSize + 10, y: padding + 22, width: contentWidth - iconSize - 84, height: 16))
+    sourceLabel.text = nativeAd.data?.adSource ?? nativeAd.data?.adxName ?? "广告"
+    sourceLabel.font = .systemFont(ofSize: 12)
+    sourceLabel.textColor = UIColor(red: 0.42, green: 0.46, blue: 0.5, alpha: 1)
+
+    let badgeLabel = UILabel(frame: CGRect(x: width - padding - 36, y: padding + 10, width: 36, height: 18))
+    badgeLabel.text = "广告"
+    badgeLabel.textAlignment = .center
+    badgeLabel.font = .systemFont(ofSize: 10)
+    badgeLabel.textColor = UIColor(red: 0.42, green: 0.46, blue: 0.5, alpha: 1)
+    badgeLabel.backgroundColor = UIColor(red: 0.95, green: 0.96, blue: 0.97, alpha: 1)
+    badgeLabel.layer.cornerRadius = 9
+    badgeLabel.clipsToBounds = true
+
+    if let iconView = canvasView.iconImageView {
+      iconView.frame = CGRect(x: padding, y: padding, width: iconSize, height: iconSize)
+      iconView.layer.cornerRadius = 8
+      iconView.clipsToBounds = true
+      if let iconURL = nativeAd.data?.icon?.imageURL {
+        loadImage(from: iconURL, into: iconView)
+      }
+      canvasView.addSubview(iconView)
+    }
+
+    titleLabel.frame = CGRect(x: padding + iconSize + 10, y: padding, width: contentWidth - iconSize - 52, height: 22)
+    canvasView.addSubview(titleLabel)
+    canvasView.addSubview(sourceLabel)
+    canvasView.addSubview(badgeLabel)
+
+    let hasVideo = (nativeAd.data?.videoDuration ?? 0) > 0
+    let mediaY = padding + iconSize + 12
+    let mediaHeight = max(height * 0.42, 140)
+    var bottomY = mediaY
+    if hasVideo, let mediaView = canvasView.mediaView {
+      mediaView.frame = CGRect(x: padding, y: mediaY, width: contentWidth, height: mediaHeight)
+      mediaView.clipsToBounds = true
+      mediaView.layer.cornerRadius = 10
+      canvasView.addSubview(mediaView)
+      bottomY = mediaView.frame.maxY
+    } else {
+      let imageView = canvasView.imageView
+      imageView.frame = CGRect(x: padding, y: mediaY, width: contentWidth, height: mediaHeight)
+      imageView.clipsToBounds = true
+      imageView.layer.cornerRadius = 10
+      imageView.contentMode = .scaleAspectFill
+      if let imageURL = nativeAd.data?.imageAry?.first?.imageURL {
+        loadImage(from: imageURL, into: imageView)
+      }
+      canvasView.addSubview(imageView)
+      bottomY = imageView.frame.maxY
+    }
+
+    descLabel.frame = CGRect(x: padding, y: bottomY + 10, width: contentWidth, height: 40)
+    canvasView.addSubview(descLabel)
+
+    let ctaButton = canvasView.callToActionBtn
+    ctaButton.frame = CGRect(x: width - padding - 96, y: min(descLabel.frame.maxY + 12, height - padding - buttonHeight), width: 96, height: buttonHeight)
+    ctaButton.setTitle(nativeAd.data?.buttonText ?? "立即查看", for: .normal)
+    ctaButton.setTitleColor(.white, for: .normal)
+    ctaButton.titleLabel?.font = .boldSystemFont(ofSize: 13)
+    ctaButton.backgroundColor = UIColor(red: 0.15, green: 0.39, blue: 0.92, alpha: 1)
+    ctaButton.layer.cornerRadius = 17
+    canvasView.addSubview(ctaButton)
+
+    var clickableViews: [UIView] = [canvasView, titleLabel, descLabel, ctaButton, badgeLabel]
+    if let iconView = canvasView.iconImageView {
+      clickableViews.append(iconView)
+    }
+    if hasVideo, let mediaView = canvasView.mediaView {
+      clickableViews.append(mediaView)
+    } else {
+      clickableViews.append(canvasView.imageView)
+    }
+    nativeAd.unregisterView()
+    nativeAd.registerContainer(canvasView, withClickableViews: clickableViews)
+    canvasView.registerClickableViews(clickableViews)
+  }
+
+  private func configureNativeDrawCanvasView(nativeAd: BUNativeAd, canvasView: BUMCanvasView, size: CGSize) {
+    let width = max(size.width, 1)
+    let height = max(size.height, 1)
+    canvasView.frame = CGRect(origin: .zero, size: CGSize(width: width, height: height))
+    canvasView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    canvasView.backgroundColor = .black
+    canvasView.clipsToBounds = true
+    canvasView.subviews.forEach { $0.removeFromSuperview() }
+
+    let overlayHeight: CGFloat = min(max(height * 0.28, 150), 220)
+    let mediaHeight = height - overlayHeight
+    if let mediaView = canvasView.mediaView {
+      mediaView.frame = CGRect(x: 0, y: 0, width: width, height: mediaHeight)
+      if let drawMediaView = mediaView as? BUMediaAdView {
+        drawMediaView.drawVideoClickEnable = true
+      }
+      canvasView.addSubview(mediaView)
+    } else {
+      let imageView = canvasView.imageView
+      imageView.frame = CGRect(x: 0, y: 0, width: width, height: mediaHeight)
+      imageView.contentMode = .scaleAspectFill
+      imageView.clipsToBounds = true
+      if let imageURL = nativeAd.data?.imageAry?.first?.imageURL {
+        loadImage(from: imageURL, into: imageView)
+      }
+      canvasView.addSubview(imageView)
+    }
+
+    let overlay = UIView(frame: CGRect(x: 0, y: height - overlayHeight, width: width, height: overlayHeight))
+    overlay.backgroundColor = UIColor(white: 0, alpha: 0.55)
+    canvasView.addSubview(overlay)
+
+    let padding: CGFloat = 16
+    let titleLabel = canvasView.titleLabel
+    titleLabel.text = nativeAd.data?.adTitle ?? "精彩广告内容"
+    titleLabel.font = .boldSystemFont(ofSize: 20)
+    titleLabel.textColor = .white
+    titleLabel.numberOfLines = 2
+    titleLabel.frame = CGRect(x: padding, y: 18, width: width - padding * 2, height: 52)
+    overlay.addSubview(titleLabel)
+
+    let descLabel = canvasView.descLabel
+    descLabel.text = nativeAd.data?.adDescription ?? "上下滑动查看更多精彩内容"
+    descLabel.font = .systemFont(ofSize: 14)
+    descLabel.textColor = UIColor(red: 0.9, green: 0.92, blue: 0.95, alpha: 1)
+    descLabel.numberOfLines = 2
+    descLabel.frame = CGRect(x: padding, y: titleLabel.frame.maxY + 8, width: width - padding * 2, height: 40)
+    overlay.addSubview(descLabel)
+
+    let sourceLabel = UILabel(frame: CGRect(x: padding, y: overlayHeight - 48, width: width - 140, height: 18))
+    sourceLabel.text = nativeAd.data?.adSource ?? nativeAd.data?.adxName ?? "广告"
+    sourceLabel.font = .systemFont(ofSize: 12)
+    sourceLabel.textColor = UIColor(red: 0.82, green: 0.85, blue: 0.88, alpha: 1)
+    overlay.addSubview(sourceLabel)
+
+    let ctaButton = canvasView.callToActionBtn
+    ctaButton.frame = CGRect(x: width - padding - 104, y: overlayHeight - 56, width: 104, height: 36)
+    ctaButton.setTitle(nativeAd.data?.buttonText ?? "立即查看", for: .normal)
+    ctaButton.setTitleColor(.white, for: .normal)
+    ctaButton.titleLabel?.font = .boldSystemFont(ofSize: 14)
+    ctaButton.backgroundColor = UIColor(red: 0.15, green: 0.39, blue: 0.92, alpha: 1)
+    ctaButton.layer.cornerRadius = 18
+    overlay.addSubview(ctaButton)
+
+    var clickableViews: [UIView] = [canvasView, overlay, titleLabel, descLabel, ctaButton]
+    if let mediaView = canvasView.mediaView {
+      clickableViews.append(mediaView)
+    } else {
+      clickableViews.append(canvasView.imageView)
+    }
+    nativeAd.unregisterView()
+    nativeAd.registerContainer(canvasView, withClickableViews: clickableViews)
+    canvasView.registerClickableViews(clickableViews)
+  }
+
+  private func loadImage(from urlString: String?, into imageView: UIImageView?) {
+    guard let imageView, let urlString, let url = URL(string: urlString) else { return }
+    URLSession.shared.dataTask(with: url) { data, _, _ in
+      guard let data, let image = UIImage(data: data) else { return }
+      DispatchQueue.main.async {
+        imageView.image = image
+      }
+    }.resume()
   }
 
   // MARK: - 事件上报
@@ -353,6 +625,19 @@ final class GromoreAdManager: NSObject {
       payload["data"] = mergedData
     }
     postAdEvent(payload)
+  }
+
+  private func emitAdRendered(adId: String, adType: String, placementId: String, width: CGFloat, height: CGFloat) {
+    postAdEvent([
+      "adId": adId,
+      "adType": adType,
+      "eventType": "rendered",
+      "placementId": placementId,
+      "data": [
+        "renderWidth": Double(width),
+        "renderHeight": Double(height)
+      ]
+    ])
   }
 
   private func emitAdClicked(adId: String, adType: String, placementId: String) {
@@ -485,26 +770,34 @@ final class GromoreAdManager: NSObject {
     return root
   }
 
-  private func readInt(request: [String: Any], key: String, fallback: Int) -> Int {
+  private func readValue(request: [String: Any], key: String) -> Any? {
     let extra = request["extra"] as? [String: Any] ?? [:]
     let iosOptions = request["iosOptions"] as? [String: Any] ?? [:]
-    let value = iosOptions[key] ?? extra[key]
+    return request[key] ?? iosOptions[key] ?? extra[key]
+  }
+
+  private func readInt(request: [String: Any], key: String, fallback: Int) -> Int {
+    let value = readValue(request: request, key: key)
     if let number = value as? NSNumber { return number.intValue }
     if let str = value as? String { return Int(str) ?? fallback }
     return fallback
   }
 
   private func readString(request: [String: Any], key: String) -> String? {
-    let extra = request["extra"] as? [String: Any] ?? [:]
-    let iosOptions = request["iosOptions"] as? [String: Any] ?? [:]
-    return (iosOptions[key] as? String) ?? (extra[key] as? String)
+    let value = readValue(request: request, key: key)
+    if let str = value as? String { return str }
+    return nil
   }
 
   private func readBool(request: [String: Any], key: String) -> Bool? {
-    let extra = request["extra"] as? [String: Any] ?? [:]
-    let iosOptions = request["iosOptions"] as? [String: Any] ?? [:]
-    if let boolVal = iosOptions[key] as? Bool { return boolVal }
-    if let boolVal = extra[key] as? Bool { return boolVal }
+    let value = readValue(request: request, key: key)
+    if let boolVal = value as? Bool { return boolVal }
+    if let number = value as? NSNumber { return number.boolValue }
+    if let str = value as? String {
+      let normalized = str.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      if normalized == "true" || normalized == "1" { return true }
+      if normalized == "false" || normalized == "0" { return false }
+    }
     return nil
   }
 
@@ -574,6 +867,7 @@ final class GromoreAdManager: NSObject {
     var adsManager: BUNativeAdsManager?
     var nativeAd: BUNativeAd?
     var delegate: FeedDelegate?
+    var renderEventSent: Bool = false
 
     override init(adId: String, placementId: String, adType: String = "native") {
       super.init(adId: adId, placementId: placementId, adType: adType)
@@ -635,6 +929,7 @@ final class GromoreAdManager: NSObject {
       case .countdownToZero: closeTypeName = "count_down_over"
       case .clickAd: closeTypeName = "click_ad"
       case .forceQuit: closeTypeName = "force_quit"
+      case .unknow: closeTypeName = "unknown"
       @unknown default: closeTypeName = "\(closeType.rawValue)"
       }
       manager?.emitAdClosed(adId: adId, adType: "splash", placementId: placementId, data: ["closeType": closeTypeName])
@@ -802,6 +1097,17 @@ final class GromoreAdManager: NSObject {
       manager?.emitAdShown(adId: adId, adType: "banner", placementId: placementId)
     }
 
+    func nativeExpressBannerAdViewRenderSuccess(_ bannerAdView: BUNativeExpressBannerView) {
+      manager?.emitLog("info", "banner render success: \(adId), width=\(bannerAdView.bounds.size.width), height=\(bannerAdView.bounds.size.height)", "ad")
+      manager?.emitAdRendered(
+        adId: adId,
+        adType: "banner",
+        placementId: placementId,
+        width: bannerAdView.bounds.size.width,
+        height: bannerAdView.bounds.size.height
+      )
+    }
+
     func nativeExpressBannerAdViewDidClick(_ bannerAdView: BUNativeExpressBannerView) {
       manager?.emitAdClicked(adId: adId, adType: "banner", placementId: placementId)
     }
@@ -839,7 +1145,10 @@ final class GromoreAdManager: NSObject {
       if ad.mediation?.isExpressAd == true {
         ad.mediation?.render()
       } else {
-        manager?.emitLog("warn", "feed ad is native render, current plugin only supports express by default", "ad")
+        manager?.emitLog("info", "feed native render detected, using built-in native feed view", "ad")
+        if let holder = manager?.adHolders[adId] as? FeedAdHolder {
+          manager?.attachFeedView(holder: holder, width: holder.container?.bounds.width ?? 0, height: holder.container?.bounds.height ?? 0)
+        }
       }
     }
 
@@ -850,6 +1159,14 @@ final class GromoreAdManager: NSObject {
     func nativeAdExpressViewRenderSuccess(_ nativeAd: BUNativeAd) {
       if let holder = manager?.adHolders[adId] as? FeedAdHolder {
         holder.nativeAd = nativeAd
+        let canvasSize = nativeAd.mediation?.canvasView.bounds.size ?? .zero
+        let fallbackSize = holder.container?.bounds.size ?? .zero
+        let size = CGSize(
+          width: canvasSize.width > 0 ? canvasSize.width : fallbackSize.width,
+          height: canvasSize.height > 0 ? canvasSize.height : fallbackSize.height
+        )
+        manager?.emitLog("info", "feed render success: \(adId), width=\(size.width), height=\(size.height)", "ad")
+        manager?.emitAdRendered(adId: adId, adType: adType, placementId: placementId, width: size.width, height: size.height)
         manager?.attachFeedView(holder: holder, width: holder.container?.bounds.size.width ?? 0, height: holder.container?.bounds.size.height ?? 0)
       }
     }

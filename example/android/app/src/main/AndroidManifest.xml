@@ -2,10 +2,29 @@
     xmlns:tools="http://schemas.android.com/tools">
     <application
         android:label="gromore_flutter_example"
-        android:name="${applicationName}"
+        android:name=".ExampleApplication"
         android:icon="@mipmap/ic_launcher"
+        android:networkSecurityConfig="@xml/network_config"
         android:usesCleartextTraffic="true"
         tools:replace="android:label">
+        <meta-data
+            android:name="com.gromore.flutter.APP_ID"
+            android:value="@string/gromore_android_app_id" />
+        <meta-data
+            android:name="com.gromore.flutter.APP_NAME"
+            android:value="@string/gromore_android_app_name" />
+        <meta-data
+            android:name="com.gromore.flutter.AUTO_INIT"
+            android:value="@bool/gromore_android_auto_init" />
+        <meta-data
+            android:name="com.gromore.flutter.DEBUG"
+            android:value="@bool/gromore_android_debug" />
+        <meta-data
+            android:name="com.gromore.flutter.USE_MEDIATION"
+            android:value="@bool/gromore_android_use_mediation" />
+        <meta-data
+            android:name="com.gromore.flutter.SUPPORT_MULTI_PROCESS"
+            android:value="@bool/gromore_android_support_multi_process" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

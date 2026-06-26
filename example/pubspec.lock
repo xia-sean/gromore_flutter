@@ -107,7 +107,7 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "2.1.7"
+    version: "2.1.8"
   integration_test:
     dependency: "direct dev"
     description: flutter

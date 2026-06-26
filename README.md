@@ -25,9 +25,9 @@
 - ✅全屏视频
 - ✅Banner
 - ✅激励视频
-- ✅信息流（模板/自渲染可选）
+- ✅信息流（模板/Express + 内置默认自渲染样式）
 - ✅Draw 信息流
-- 🏆多端 AppId/AppName 配置：当前平台缺失会初始化失败，非当前平台会返回 `skipped`
+- 🏆多端 AppId/AppName 配置：iOS 继续走 Flutter 显式传参；Android 支持 Flutter 传参或 `manifest meta-data` 原生配置
 - 🏆日志系统：Debug 默认开启，Release 默认关闭，可手动开关；支持日志级别、日志回调、文件落盘与 txt 导出
 - 🏆预留 nativeOptions/invokeNative 兜底能力，覆盖平台差异
 - 🏆示例工程：每种广告类型一个页面，支持输入真实 appId/代码位
@@ -76,6 +76,23 @@ dependencies:
 3. 初始化（iOS 若需 IDFA，先 `requestATT()`）。
 4. 加载并展示广告（见下方“广告加载与展示”）。
 
+## ⚠️ Android 接入先看这里
+
+如果你是 Android 宿主接入方，先按这 3 种场景选：
+
+- 单进程普通 App：直接用 Flutter `init(config)`，在 Dart 里传 `androidAppId/androidAppName`
+- 多进程，且允许启动即初始化：在宿主 `AndroidManifest.xml` 里配置 meta-data `com.gromore.flutter.AUTO_INIT=true`，Flutter 可不再传 Android `appId/appName`
+- 必须用户同意隐私后再初始化：在宿主 `AndroidManifest.xml` 里配置 meta-data `com.gromore.flutter.AUTO_INIT=false`，然后由宿主原生调用 `GromoreFlutterNativeInit`
+
+宿主可直接照抄完整模板：
+[Android 宿主接入模板](https://github.com/xia-sean/gromore_flutter/blob/main/doc/android_host_integration_template.md)
+
+宿主原生手动初始化的公开 API：
+
+- `GromoreFlutterNativeInit.initializeFromManifest(...)`
+- `GromoreFlutterNativeInit.initialize(...)`
+- `GromoreFlutterNativeInit.getInitializationStatus(...)`
+
 ## 🔗 Android/iOS 依赖说明（官方 Maven/Pod）
 
 本插件已按官方 Maven/Pod 接入 GroMore SDK（以官方文档为准，可按需调整版本）。
@@ -91,29 +108,78 @@ Android 端默认不引入任何 Adapter（仅 GroMore 核心）；可通过 `GM
 
 **iOS（Pod）**
 
-- GroMore 核心：`Ads-CN-Beta 7.4.0.1`（含 `BUAdSDK/CSJMediation`）
+- GroMore 核心：`Ads-CN-Beta 7.5.0.4`（含 `BUAdSDK/CSJMediation`）
 
 **Android（Maven）**
 
-- GroMore 核心：`com.pangle_beta.cn:mediation-sdk:7.4.1.4`
-- 测试工具（Debug）：`com.pangle_beta.cn:mediation-test-tools:7.4.1.4`
+- GroMore 核心：`com.pangle_beta.cn:mediation-sdk:7.5.1.0`
+- 测试工具（Debug）：`com.pangle_beta.cn:mediation-test-tools:7.5.1.0`
 
 **Android（已固定的 Adapter 版本）**
 
-- GDT：`com.pangle_beta.cn:mediation-gdt-adapter:4.662.1532.0`
-- 百度：`com.pangle_beta.cn:mediation-baidu-adapter:9.423.3`
-- 快手：`com.pangle_beta.cn:mediation-ks-adapter:4.11.20.1.0`
-- AdMob：`com.pangle_beta.cn:mediation-admob-adapter:17.2.0.72`
-- Sigmob：`com.pangle_beta.cn:mediation-sigmob-adapter:4.25.2.0`
+- GDT：`com.pangle_beta.cn:mediation-gdt-adapter:4.670.1540.0`
+- 百度：`com.pangle_beta.cn:mediation-baidu-adapter:9.430.0`
+- 快手：`com.pangle_beta.cn:mediation-ks-adapter:4.12.20.1.0`
+- AdMob：`com.pangle_beta.cn:mediation-admob-adapter:17.2.0.73`
+- Sigmob：`com.pangle_beta.cn:mediation-sigmob-adapter:4.25.9.0`
 
 ## 🔐 Android 需要的权限与 Manifest 配置（请按官方文档与业务需要取舍）
 
-以下为示例工程中常见配置，请结合你的隐私合规与业务实际情况取舍：
+插件 Android 库会自动合并以下基础项：
 
-- 必选/常用权限：
-  - `android.permission.INTERNET`
-  - `android.permission.ACCESS_NETWORK_STATE`
-  - `android.permission.ACCESS_WIFI_STATE`
+- `android.permission.INTERNET`
+- `android.permission.ACCESS_NETWORK_STATE`
+- `android.permission.ACCESS_WIFI_STATE`
+- `com.bytedance.sdk.openadsdk.TTFileProvider`
+- `@xml/pangle_file_paths`
+- `GromoreFlutterInitProvider`（可按宿主 `manifest meta-data` 在进程启动时自动初始化 SDK）
+
+**Android 原生初始化配置（推荐用于多进程）**
+
+Android 端现在支持通过宿主应用的 `manifest meta-data` 提供初始化参数，值可以直接写在 manifest 中，也可以引用 `@string/@bool` 资源文件。  
+其中 `com.gromore.flutter.AUTO_INIT` 是一个真实可配置的 manifest meta-data key，用来控制“是否启用进程启动阶段自动初始化”，不是文档里的抽象模式名词。典型配置如下：
+
+```xml
+<application>
+    <meta-data
+        android:name="com.gromore.flutter.APP_ID"
+        android:value="@string/gromore_android_app_id" />
+    <meta-data
+        android:name="com.gromore.flutter.APP_NAME"
+        android:value="@string/gromore_android_app_name" />
+    <meta-data
+        android:name="com.gromore.flutter.AUTO_INIT"
+        android:value="@bool/gromore_android_auto_init" />
+    <meta-data
+        android:name="com.gromore.flutter.DEBUG"
+        android:value="@bool/gromore_android_debug" />
+    <meta-data
+        android:name="com.gromore.flutter.USE_MEDIATION"
+        android:value="@bool/gromore_android_use_mediation" />
+    <meta-data
+        android:name="com.gromore.flutter.SUPPORT_MULTI_PROCESS"
+        android:value="@bool/gromore_android_support_multi_process" />
+</application>
+```
+
+```xml
+<resources>
+    <string name="gromore_android_app_id">your_android_app_id</string>
+    <string name="gromore_android_app_name">your_android_app_name</string>
+    <bool name="gromore_android_auto_init">true</bool>
+    <bool name="gromore_android_debug">false</bool>
+    <bool name="gromore_android_use_mediation">true</bool>
+    <bool name="gromore_android_support_multi_process">true</bool>
+</resources>
+```
+
+- 当宿主 manifest meta-data `com.gromore.flutter.AUTO_INIT=true` 时，插件会在进程启动阶段自动初始化 GroMore，适合标准多进程接入。
+- 当宿主 manifest meta-data `com.gromore.flutter.AUTO_INIT=false` 时，插件不会在进程启动阶段自动初始化；但 Flutter `init()` 或宿主原生公开 API 仍可继续手动初始化。
+- 如果你的业务需要“用户同意隐私后再初始化”，请把宿主 manifest meta-data `com.gromore.flutter.AUTO_INIT` 设为 `false`，然后在宿主原生 `Application`/对应子进程里自行触发初始化，再由 Flutter 侧只负责广告操作。
+
+以下为业务 App 仍需按官方文档与业务需要自行补充/取舍的配置：
+
+- 常用权限：
   - `android.permission.CHANGE_NETWORK_STATE`
   - `android.permission.READ_PHONE_STATE`（部分 SDK 仍需）
 - 可选权限（按业务场景与合规要求决定）：
@@ -125,26 +191,15 @@ Android 端默认不引入任何 Adapter（仅 GroMore 核心）；可通过 `GM
   - `android.permission.SYSTEM_ALERT_WINDOW` / `android.permission.EXPAND_STATUS_BAR`
   - `android.permission.WRITE_EXTERNAL_STORAGE`（旧版本存储）
 
-Manifest 关键配置示例（按需调整）：
+插件未自动注入、业务侧可按需追加的 Manifest 配置示例：
 
 ```xml
 <application
     android:networkSecurityConfig="@xml/network_config"
-    android:requestLegacyExternalStorage="true">
-
-    <provider
-        android:name="com.bytedance.sdk.openadsdk.TTFileProvider"
-        android:authorities="${applicationId}.TTFileProvider"
-        android:exported="false"
-        android:grantUriPermissions="true">
-        <meta-data
-            android:name="android.support.FILE_PROVIDER_PATHS"
-            android:resource="@xml/file_paths" />
-    </provider>
-</application>
+    android:requestLegacyExternalStorage="true" />
 ```
 
-`res/xml/file_paths.xml` 示例：
+如你需要自定义文件共享路径，也可在应用侧覆盖 `res/xml/pangle_file_paths.xml`：
 
 ```xml
 <?xml version="1.0" encoding="utf-8"?>
@@ -200,14 +255,22 @@ GM_ADNS=gdt,baidu flutter run
 - `NSCameraUsageDescription`（如广告落地页需相机）
 - `LSApplicationQueriesSchemes`（第三方应用跳转能力）
 - `SKAdNetworkItems`（SKAdNetwork 配置列表，按官方文档补齐）
+- `NSBonjourServices`（调试阶段建议包含 `_dartVmService._tcp`）
+- `NSLocalNetworkUsageDescription`（本地网络调试连接说明）
 
 > 若接入多家 ADN（如广点通/快手/百度等），请按对应 SDK 文档补充相关 `Info.plist` 与系统能力配置。
+
+**iOS 17 隐私清单**
+
+- 插件 Pod 已随产物打包 `PrivacyInfo.xcprivacy`。
+- 若你的 App 自身也维护了 `PrivacyInfo.xcprivacy`，请将各 SDK 的条目合并到应用自己的清单中，不要只依赖单个 SDK bundle。
 
 **最小配置说明**
 
 - 仅使用 GroMore 核心时，不需要额外第三方平台（ADN）的 AppId/AppKey/专有字段。
 - 只要引入某个平台 SDK/Adapter，就必须补齐该平台要求的 `Info.plist`/权限/系统能力配置（例如 AdMob 的 `GADApplicationIdentifier`）。
 - 插件不会自动修改应用侧的 `Info.plist`，这些字段需要接入方手动补充。
+- 若使用较老 Flutter 版本配合较新 Xcode（如 Xcode 26+）进行 iOS 调试，缺少 `NSBonjourServices` / `NSLocalNetworkUsageDescription` 可能触发 `Info.plist: Could not extract value` 并导致构建脚本失败，建议在业务工程 `Info.plist` 显式补齐。
 
 ## 🧩 iOS 多 ADN 配置（官方推荐 / 固定版本）
 
@@ -268,7 +331,9 @@ GM_MODE=fixed GM_ADNS=admob pod install
 
 **参数说明**
 
-- `androidAppId/androidAppName/iosAppId/iosAppName`：平台 AppId/AppName；当前平台缺失会初始化失败，非当前平台可不填。
+- `androidAppId/androidAppName/iosAppId/iosAppName`：平台 AppId/AppName。
+- Android 可直接在 Flutter 里传 `androidAppId/androidAppName`，也可改为宿主 `manifest meta-data` 原生配置后在 Flutter 留空。
+- iOS 仍需在 Flutter 侧显式传 `iosAppId/iosAppName`；非当前平台可不填。
 - `debug`：是否调试模式（建议 Debug=true，Release=false）。
 - `useMediation`：是否启用聚合。
 - `enableLog`：日志开关（不传则 Debug 默认开、Release 默认关）。
@@ -276,6 +341,17 @@ GM_MODE=fixed GM_ADNS=admob pod install
 - `enabledAdTypes`：启用的广告类型集合；未启用的类型会在 `loadAd` 时抛出异常。
   - 支持类型：`splash / interstitial / fullscreenVideo / rewardVideo / native / drawNative / banner`
 - `androidOptions/iosOptions`：扩展参数透传给原生（按官方文档/业务需求填写）。
+
+**初始化扩展参数（当前已支持的常用键）**
+
+- `androidOptions`
+- `supportMultiProcess`、`paid`、`keywords`、`data`、`titleBarTheme`、`allowShowNotify`、`themeStatus`、`ageGroup`、`directDownloadNetworkType`
+- `privacy.canUseLocation`、`privacy.latitude`、`privacy.longitude`、`privacy.canUsePhoneState`、`privacy.canUseWifiState`、`privacy.canUseWriteExternal`、`privacy.canUseAndroidId`、`privacy.androidId`、`privacy.canUseOaid`、`privacy.oaid`、`privacy.limitPersonalAds`、`privacy.programmaticRecommend`、`privacy.customAppList`、`privacy.customDevImeis`
+- `mediationConfig.publisherDid`、`mediationConfig.openAdnTest`、`mediationConfig.https`、`mediationConfig.localExtra`、`mediationConfig.customLocalConfig`、`mediationConfig.userInfoForSegment`
+- `iosOptions`
+- `ageGroup`、`userExtData`、`themeStatus`、`customIdfa`、`allowModifyAudioSessionSetting`、`unityDeveloper`
+- `privacy.canUseLocation`、`privacy.latitude`、`privacy.longitude`、`privacy.canUseWiFiBSSID`、`privacy.privacyConfig`
+- `mediation.limitPersonalAds`、`mediation.limitProgrammaticAds`、`mediation.forbiddenIDFA`、`mediation.allowUploadDeviceInfo`、`mediation.advanceSDKConfigPath`、`mediation.extraDeviceMap`、`mediation.userInfoForSegment`、`mediation.extraData`
 
 **返回结果**
 
@@ -295,6 +371,12 @@ GM_MODE=fixed GM_ADNS=admob pod install
 - `exportLogFile({String? fileName})`：导出当前日志文件并返回 txt 路径。
 - `GromoreLogger.setPrintNativeLog(bool)`：是否把原生日志输出到控制台。
 
+**Android 推荐接法分层**
+
+- 单进程普通 App：直接使用 Flutter `init(config)`。
+- 多进程 App：推荐在宿主 `AndroidManifest.xml` 中配置 `com.gromore.flutter.AUTO_INIT=true`。
+- 隐私同意后初始化：推荐在宿主 `AndroidManifest.xml` 中配置 `com.gromore.flutter.AUTO_INIT=false`，并由宿主原生在同意后调用 `GromoreFlutterNativeInit.initializeFromManifest(...)` 或 `initialize(...)`。
+
 ```dart
 import 'package:flutter/foundation.dart';
 import 'package:gromore_flutter/gromore_flutter.dart';
@@ -304,8 +386,6 @@ await GromoreFlutter.instance.requestATT();
 
 // 2) 初始化配置（覆盖所有字段）
 final config = GromoreConfig(
-  androidAppId: 'your_android_app_id',
-  androidAppName: 'your_android_app_name',
   iosAppId: 'your_ios_app_id',
   iosAppName: 'your_ios_app_name',
   debug: kDebugMode,
@@ -322,12 +402,35 @@ final config = GromoreConfig(
     GromoreAdType.banner,
   },
   // 透传给原生的扩展参数（按需填写）
-  androidOptions: {'custom': 'value'},
-  iosOptions: {'custom': 'value'},
+  androidOptions: {
+    'themeStatus': 0,
+    'privacy': {
+      'canUseLocation': false,
+      'canUsePhoneState': false,
+      'canUseOaid': false,
+      'limitPersonalAds': true,
+    },
+  },
+  iosOptions: {
+    'ageGroup': 0,
+    'privacy': {
+      'canUseLocation': false,
+      'privacyConfig': {
+        'ABUPrivacyLimitPersonalAds': 1,
+      },
+    },
+    'mediation': {
+      'limitPersonalAds': 1,
+    },
+  },
 );
 
 // 3) 初始化
 final result = await GromoreFlutter.instance.init(config);
+
+// Android 若已在宿主 AndroidManifest.xml 中配置 com.gromore.flutter.AUTO_INIT=true，
+// Flutter 侧调用 init()
+// 只会复用/确认原生初始化状态；未自动初始化时则按当前配置兜底初始化。
 
 // 4) 日志开关/级别（可在 init 前后调用）
 await GromoreFlutter.instance.setLogEnabled(true);
@@ -355,6 +458,116 @@ if (!result.ios.success) {
   debugPrint('iOS init failed: ${result.ios.errorCode} ${result.ios.errorMessage}');
 }
 ```
+
+## 🤖 Android 宿主原生手动初始化（隐私同意后）
+
+如果你的业务要求“用户同意隐私协议后再初始化 SDK”，推荐在宿主 Android 原生侧调用公开 API，而不是把首次初始化完全依赖在 Flutter 页面时机上。
+
+完整宿主模板可直接看：
+[Android 宿主接入模板](https://github.com/xia-sean/gromore_flutter/blob/main/doc/android_host_integration_template.md)
+
+**方式 1：从 manifest meta-data 读取**
+
+```kotlin
+import com.gromore.flutter.GromoreFlutterNativeInit
+
+class App : Application() {
+  fun initGroMoreAfterConsent() {
+    GromoreFlutterNativeInit.initializeFromManifest(
+      context = this,
+      callback = object : GromoreFlutterNativeInit.Callback {
+        override fun onSuccess() {
+          // SDK 已初始化
+        }
+
+        override fun onFailure(errorCode: String, errorMessage: String) {
+          // 初始化失败
+        }
+      }
+    )
+  }
+}
+```
+
+如果你需要在“以 manifest 为主”的前提下，补充更多 Android 初始化参数，也可以传入 `androidOptions`：
+
+```kotlin
+GromoreFlutterNativeInit.initializeFromManifest(
+  context = this,
+  androidOptions = mapOf(
+    GromoreFlutterNativeInit.OPTION_PRIVACY to mapOf(
+      "canUseLocation" to false,
+      "canUsePhoneState" to false,
+      "canUseOaid" to false,
+    ),
+    GromoreFlutterNativeInit.OPTION_MEDIATION_CONFIG to mapOf(
+      "publisherDid" to "your_publisher_did",
+    ),
+  ),
+)
+```
+
+**方式 2：宿主原生显式传参**
+
+```kotlin
+import com.gromore.flutter.GromoreFlutterNativeInit
+
+GromoreFlutterNativeInit.initialize(
+  context = this,
+  appId = "your_android_app_id",
+  appName = "your_android_app_name",
+  debug = BuildConfig.DEBUG,
+  useMediation = true,
+  androidOptions = mapOf(
+    GromoreFlutterNativeInit.OPTION_SUPPORT_MULTI_PROCESS to true,
+    GromoreFlutterNativeInit.OPTION_THEME_STATUS to 0,
+    GromoreFlutterNativeInit.OPTION_PRIVACY to mapOf(
+      "canUseLocation" to false,
+      "canUsePhoneState" to false,
+      "canUseOaid" to false,
+      "limitPersonalAds" to true,
+    ),
+    GromoreFlutterNativeInit.OPTION_MEDIATION_CONFIG to mapOf(
+      "publisherDid" to "your_publisher_did",
+    ),
+  ),
+  callback = object : GromoreFlutterNativeInit.Callback {
+    override fun onSuccess() {}
+
+    override fun onFailure(errorCode: String, errorMessage: String) {}
+  }
+)
+```
+
+宿主原生这套 `androidOptions` 与 Flutter `GromoreConfig.androidOptions` 使用同一套 key 语义，常用项包括：
+
+- `OPTION_SUPPORT_MULTI_PROCESS`
+- `OPTION_PAID`
+- `OPTION_KEYWORDS`
+- `OPTION_DATA`
+- `OPTION_TITLE_BAR_THEME`
+- `OPTION_ALLOW_SHOW_NOTIFY`
+- `OPTION_THEME_STATUS`
+- `OPTION_AGE_GROUP`
+- `OPTION_DIRECT_DOWNLOAD_NETWORK_TYPE`
+- `OPTION_INIT_EXTRA`
+- `OPTION_PRIVACY`
+- `OPTION_MEDIATION_CONFIG`
+
+**公开的 Android meta-data key**
+
+- `GromoreFlutterNativeInit.META_APP_ID`
+- `GromoreFlutterNativeInit.META_APP_NAME`
+- `GromoreFlutterNativeInit.META_AUTO_INIT` 对应宿主 manifest meta-data key：`com.gromore.flutter.AUTO_INIT`
+- `GromoreFlutterNativeInit.META_DEBUG`
+- `GromoreFlutterNativeInit.META_USE_MEDIATION`
+- `GromoreFlutterNativeInit.META_SUPPORT_MULTI_PROCESS`
+
+**建议**
+
+- 单进程且无隐私前置要求：继续用 Flutter `init(config)` 即可。
+- 多进程且允许启动即初始化：在宿主 `AndroidManifest.xml` 中配置 `com.gromore.flutter.AUTO_INIT=true`。
+- 多进程且必须隐私同意后初始化：在宿主 `AndroidManifest.xml` 中配置 `com.gromore.flutter.AUTO_INIT=false`，并使用宿主原生手动初始化，Flutter 侧只负责广告操作与兜底确认。
 
 ## 📝 日志
 
@@ -437,6 +650,7 @@ final subscription = GromoreFlutter.instance.listenAdEvents(
   adType: GromoreAdType.rewardVideo,
   callback: GromoreAdCallback(
     onLoaded: (e) => print('loaded: ${e.adId}'),
+    onRendered: (e) => print("rendered: ${e.data?['renderWidth']} x ${e.data?['renderHeight']}"),
     onFailed: (e) => print('failed: ${e.errorCode} ${e.errorMessage}'),
     onShown: (e) => print('shown'),
     onClicked: (e) => print('clicked'),
@@ -455,6 +669,10 @@ GromoreFlutter.instance.adEvents.listen((event) {
   print('event: ${event.eventType} ${event.adId}');
 });
 ```
+
+`rendered` 事件用于回传模板广告真实渲染尺寸，字段位于 `event.data`：
+- `renderWidth`
+- `renderHeight`
 
 ## 🧩 2. 类型化 Config + Facade（推荐用法）
 
@@ -530,6 +748,11 @@ final drawId = await GromoreDraw.load(
 );
 ```
 
+> 当前 Flutter 插件优先展示模板/Express 信息流；若代码位实际返回自渲染信息流，会回退到插件内置的默认原生卡片样式。
+> `adCount` 会按官方范围限制在 `1~3`，但当前 Flutter 插件只会使用首条返回广告。
+> Android 原生信息流请求宽高遵循官方接口单位 `px`；Flutter 页面展示宽高仍使用逻辑像素，示例工程里已按 `dp * devicePixelRatio` 转换后再发起请求。
+> Draw 已改为走原生 SDK 的专用加载链路；若返回自渲染 draw，插件会回退到内置沉浸式默认样式。
+
 ### 2.6 Banner
 
 ```dart
@@ -599,8 +822,9 @@ await GromoreFlutter.instance.disposeAd(adId);
 ## 🧭 信息流模式说明
 
 - 模板/Express：SDK 返回广告视图，SDK 负责广告 UI 渲染；你将其插入列表/瀑布流。
-- 自渲染/Native：SDK 返回素材数据，自定义布局并注册点击区域。
-- Android 自渲染仅支持历史代码位；如无历史代码位请使用模板信息流。
+- 自渲染/Native：官方流程需要媒体侧绑定素材、注册点击区域，并在 iOS 侧刷新 `canvasView` 数据。
+- 当前 Flutter 插件已内置一套默认自渲染卡片样式：当代码位返回自渲染信息流时，原生层会自动完成素材绑定、点击注册和基础下载按钮状态联动。
+- 当前 Flutter 插件仍未暴露 Flutter 自定义信息流素材布局 API；若你需要完全自定义 UI，仍需继续扩展插件接口。
 
 ## 🧪 预览工具（Debug）
 

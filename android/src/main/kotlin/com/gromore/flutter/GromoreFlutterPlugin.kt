@@ -4,8 +4,6 @@ import android.app.Activity
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
-import com.bytedance.sdk.openadsdk.TTAdConfig
-import com.bytedance.sdk.openadsdk.TTCustomController
 import com.bytedance.sdk.openadsdk.TTAdSdk
 import com.bytedance.tools.util.ToolsUtil
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -47,9 +45,6 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
 
   /** 广告管理器 */
   private var adManager: GromoreAdManager? = null
-
-  /** 初始化状态 */
-  private var initInProgress = false
 
   /** 日志开关 */
   private var logEnabled = false
@@ -169,38 +164,10 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
    */
   private fun handleInit(call: MethodCall, result: Result) {
     val args = call.arguments as? Map<*, *> ?: emptyMap<Any, Any>()
-    val appId = args["androidAppId"] as? String
-    val appName = args["androidAppName"] as? String
-    val debug = args["debug"] as? Boolean ?: false
-    val useMediation = args["useMediation"] as? Boolean ?: true
     val enableLog = args["enableLog"] as? Boolean
 
     if (enableLog != null) {
       logEnabled = enableLog
-    }
-
-    if (appId.isNullOrBlank()) {
-      emitLog("error", "Android appId is missing.", "init")
-      result.success(
-        mapOf(
-          "success" to false,
-          "errorCode" to "missing_android_app_id",
-          "errorMessage" to "Android appId is missing."
-        )
-      )
-      return
-    }
-
-    if (appName.isNullOrBlank()) {
-      emitLog("error", "Android appName is missing.", "init")
-      result.success(
-        mapOf(
-          "success" to false,
-          "errorCode" to "missing_android_app_name",
-          "errorMessage" to "Android appName is missing."
-        )
-      )
-      return
     }
 
     if (TTAdSdk.isInitSuccess()) {
@@ -208,30 +175,9 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
       result.success(mapOf("success" to true))
       return
     }
-    if (initInProgress) {
-      emitLog("warn", "init result success=false reason=init_in_progress", "init")
-      result.success(
-        mapOf(
-          "success" to false,
-          "errorCode" to "init_in_progress",
-          "errorMessage" to "Init is already in progress."
-        )
-      )
-      return
-    }
-
-    initInProgress = true
-    val config = TTAdConfig.Builder()
-      .appId(appId)
-      .appName(appName)
-      .debug(debug)
-      .useMediation(useMediation)
-      .customController(buildPrivacyCustomController())
-      .build()
 
     val context = applicationContext ?: activity?.applicationContext
     if (context == null) {
-      initInProgress = false
       emitLog("error", "init result success=false reason=no_context", "init")
       result.success(
         mapOf(
@@ -243,43 +189,33 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
       return
     }
 
-    val initSuccess = TTAdSdk.init(context, config)
-    if (!initSuccess) {
-      initInProgress = false
-      emitLog("error", "init result success=false reason=init_failed", "init")
+    val resolvedConfig = GromoreFlutterInitializer.resolveConfig(context, args)
+    if (resolvedConfig == null) {
+      emitLog(
+        "error",
+        "Android init config is missing. Provide androidAppId/androidAppName in Flutter or configure manifest meta-data.",
+        "init"
+      )
       result.success(
         mapOf(
           "success" to false,
-          "errorCode" to "init_failed",
-          "errorMessage" to "TTAdSdk.init returned false."
+          "errorCode" to "missing_android_init_config",
+          "errorMessage" to "Android init config is missing. Provide androidAppId/androidAppName in Flutter or configure manifest meta-data."
         )
       )
       return
     }
 
-    TTAdSdk.start(object : TTAdSdk.Callback {
-      override fun success() {
-        initInProgress = false
-        emitLog("info", "init result success=true reason=started", "init")
+    GromoreFlutterInitializer.initialize(
+      context = context,
+      config = resolvedConfig,
+      emitLog = { level, message, tag -> emitLog(level, message, tag) },
+      onComplete = { payload ->
         mainHandler.post {
-          result.success(mapOf("success" to true))
+          result.success(payload)
         }
       }
-
-      override fun fail(code: Int, msg: String?) {
-        initInProgress = false
-        emitLog("error", "init result success=false reason=$code:$msg", "init")
-        mainHandler.post {
-          result.success(
-            mapOf(
-              "success" to false,
-              "errorCode" to code.toString(),
-              "errorMessage" to (msg ?: "TTAdSdk.start failed.")
-            )
-          )
-        }
-      }
-    })
+    )
   }
 
   /**
@@ -292,20 +228,6 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     val args = call.arguments as? Map<*, *>
     logEnabled = args?.get("enabled") as? Boolean ?: logEnabled
     result.success(null)
-  }
-
-  /**
-   * Android 隐私采集控制：
-   * 通过 mcod=0 禁止设备信息频繁采集。
-   */
-  private fun buildPrivacyCustomController(): TTCustomController {
-    return object : TTCustomController() {
-      override fun userPrivacyConfig(): MutableMap<String, Any> {
-        val map = HashMap<String, Any>()
-        map["mcod"] = "0"
-        return map
-      }
-    }
   }
 
   /**
@@ -391,6 +313,14 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
     when (method) {
       "isSdkReady" -> result.success(TTAdSdk.isSdkReady())
       "isInitSuccess" -> result.success(TTAdSdk.isInitSuccess())
+      "getInitializationStatus" -> {
+        val context = applicationContext ?: activity?.applicationContext
+        if (context == null) {
+          result.error("no_context", "Application context is null.", null)
+          return
+        }
+        result.success(GromoreFlutterInitializer.getInitializationStatus(context))
+      }
       "getSdkVersionName" -> result.success(TTAdSdk.SDK_VERSION_NAME)
       "getSdkVersionCode" -> result.success(TTAdSdk.SDK_VERSION_CODE)
       "requestATT" -> result.success(true)

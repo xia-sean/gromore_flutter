@@ -152,7 +152,13 @@ final class GromoreAdManager: NSObject {
   private func loadSplashAd(adId: String, placementId: String, request: [String: Any]) {
     let slot = BUAdSlot()
     slot.id = placementId
-    let size = UIScreen.main.bounds.size
+    let size = resolveSplashAdSize()
+
+    emitLog(
+      "info",
+      "splash ad size resolved: width=\(Int(size.width)), height=\(Int(size.height))",
+      "ad"
+    )
 
     let splashAd = BUSplashAd(slot: slot, adSize: size)
     let delegate = SplashDelegate(manager: self, adId: adId, placementId: placementId)
@@ -332,6 +338,7 @@ final class GromoreAdManager: NSObject {
       return
     }
     ad.showSplashView(inRootViewController: rootVC)
+    scheduleSdkConstraintRepair()
   }
 
   private func showRewardAd(holder: RewardAdHolder) {
@@ -740,18 +747,195 @@ final class GromoreAdManager: NSObject {
 
   // MARK: - 工具方法
 
-  private func topViewController() -> UIViewController? {
-    if #available(iOS 13.0, *) {
-      let scenes = UIApplication.shared.connectedScenes
-        .compactMap { $0 as? UIWindowScene }
-      for scene in scenes {
-        if let window = scene.windows.first(where: { $0.isKeyWindow }),
-           let root = window.rootViewController {
-          return topViewController(from: root)
+  private func scheduleSdkConstraintRepair() {
+    let delays: [TimeInterval] = [0, 0.12, 0.35, 0.8]
+    for delay in delays {
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+        guard let self else { return }
+        guard let rootView = self.currentKeyWindow() ?? self.topViewController()?.view else {
+          return
+        }
+        let fixedCount = self.repairSdkConstraintConflicts(in: rootView)
+        if fixedCount > 0 {
+          self.emitLog("info", "sdk constraint repair applied: \(fixedCount)", "ad")
         }
       }
     }
-    if let window = UIApplication.shared.keyWindow, let root = window.rootViewController {
+  }
+
+  @discardableResult
+  private func repairSdkConstraintConflicts(in rootView: UIView) -> Int {
+    var fixedCount = 0
+    fixedCount += repairUpieLottieConstraintsIfNeeded(in: rootView)
+    fixedCount += repairUgenImageConstraintsIfNeeded(in: rootView)
+    for subview in rootView.subviews {
+      fixedCount += repairSdkConstraintConflicts(in: subview)
+    }
+    return fixedCount
+  }
+
+  private func repairUpieLottieConstraintsIfNeeded(in view: UIView) -> Int {
+    let className = NSStringFromClass(type(of: view))
+    guard className.contains("UpieLottiePlayerControlView") else { return 0 }
+
+    var fixedCount = 0
+    for case let button as UIButton in view.subviews {
+      guard buttonFillsSuperview(button, in: view) else { continue }
+      let conflicting = button.constraints.filter {
+        guard $0.relation == .equal, $0.secondItem == nil else { return false }
+        let isSize = $0.firstAttribute == .width || $0.firstAttribute == .height
+        return isSize && abs($0.constant - 50) < 0.5
+      }
+      if !conflicting.isEmpty {
+        NSLayoutConstraint.deactivate(conflicting)
+        fixedCount += conflicting.count
+      }
+    }
+    return fixedCount
+  }
+
+  private func buttonFillsSuperview(_ button: UIButton, in container: UIView) -> Bool {
+    var top = false
+    var bottom = false
+    var leading = false
+    var trailing = false
+
+    for constraint in container.constraints {
+      let firstView = constraint.firstItem as? UIView
+      let secondView = constraint.secondItem as? UIView
+      let pairMatches =
+        (firstView === button && secondView === container) ||
+        (firstView === container && secondView === button)
+      guard pairMatches, constraint.relation == .equal, abs(constraint.constant) < 0.5 else {
+        continue
+      }
+      switch (constraint.firstAttribute, constraint.secondAttribute) {
+      case (.top, .top), (.topMargin, .topMargin):
+        top = true
+      case (.bottom, .bottom), (.bottomMargin, .bottomMargin):
+        bottom = true
+      case (.leading, .leading), (.left, .left), (.leadingMargin, .leadingMargin):
+        leading = true
+      case (.trailing, .trailing), (.right, .right), (.trailingMargin, .trailingMargin):
+        trailing = true
+      default:
+        break
+      }
+    }
+    return top && bottom && leading && trailing
+  }
+
+  private func repairUgenImageConstraintsIfNeeded(in view: UIView) -> Int {
+    let className = NSStringFromClass(type(of: view))
+    guard className.contains("UgenImageView") else { return 0 }
+    guard let superview = view.superview,
+          NSStringFromClass(type(of: superview)).contains("UgenFrameLayoutView") else {
+      return 0
+    }
+    guard ugenImageIsPinnedVertically(view, in: superview),
+          ugenImageHasFixedWidth(view) else {
+      return 0
+    }
+
+    let conflicting = view.constraints.filter {
+      guard $0.relation == .equal else { return false }
+      let firstView = $0.firstItem as? UIView
+      let secondView = $0.secondItem as? UIView
+      return firstView === view &&
+        secondView === view &&
+        (
+          ($0.firstAttribute == .width && $0.secondAttribute == .height) ||
+          ($0.firstAttribute == .height && $0.secondAttribute == .width)
+        )
+    }
+    if conflicting.isEmpty { return 0 }
+    NSLayoutConstraint.deactivate(conflicting)
+    return conflicting.count
+  }
+
+  private func ugenImageIsPinnedVertically(_ view: UIView, in container: UIView) -> Bool {
+    var topPinned = false
+    var bottomPinned = false
+    for constraint in container.constraints {
+      let firstView = constraint.firstItem as? UIView
+      let secondView = constraint.secondItem as? UIView
+      let pairMatches =
+        (firstView === view && secondView === container) ||
+        (firstView === container && secondView === view)
+      guard pairMatches, constraint.relation == .equal || constraint.relation == .greaterThanOrEqual else {
+        continue
+      }
+      switch (constraint.firstAttribute, constraint.secondAttribute) {
+      case (.top, .top), (.topMargin, .topMargin):
+        topPinned = true
+      case (.bottom, .bottom), (.bottomMargin, .bottomMargin):
+        bottomPinned = true
+      default:
+        break
+      }
+    }
+    return topPinned && bottomPinned
+  }
+
+  private func ugenImageHasFixedWidth(_ view: UIView) -> Bool {
+    return view.constraints.contains {
+      $0.relation == .equal &&
+      $0.secondItem == nil &&
+      $0.firstItem as? UIView === view &&
+      $0.firstAttribute == .width
+    }
+  }
+
+  private func resolveSplashAdSize() -> CGSize {
+    let fallbackSize = normalizedSplashAdSize(UIScreen.main.bounds.size)
+
+    let candidates: [CGSize?] = [
+      currentKeyWindow()?.bounds.size,
+      topViewController()?.view.window?.bounds.size,
+      topViewController()?.view.bounds.size,
+      activeWindowScene()?.screen.bounds.size,
+      UIScreen.main.bounds.size
+    ]
+
+    for candidate in candidates {
+      guard let size = candidate, size.width > 0, size.height > 0 else { continue }
+      return normalizedSplashAdSize(size)
+    }
+
+    return fallbackSize.width > 0 && fallbackSize.height > 0
+      ? fallbackSize
+      : CGSize(width: 375, height: 667)
+  }
+
+  private func normalizedSplashAdSize(_ size: CGSize) -> CGSize {
+    let width = max(size.width, 0)
+    let height = max(size.height, 0)
+    guard width > 0, height > 0 else { return .zero }
+    return CGSize(width: min(width, height), height: max(width, height))
+  }
+
+  private func activeWindowScene() -> UIWindowScene? {
+    if #available(iOS 13.0, *) {
+      return UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .first { $0.activationState == .foregroundActive }
+    }
+    return nil
+  }
+
+  private func currentKeyWindow() -> UIWindow? {
+    if #available(iOS 13.0, *) {
+      for scene in UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }) {
+        if let window = scene.windows.first(where: { $0.isKeyWindow }) {
+          return window
+        }
+      }
+    }
+    return UIApplication.shared.keyWindow
+  }
+
+  private func topViewController() -> UIViewController? {
+    if let window = currentKeyWindow(), let root = window.rootViewController {
       return topViewController(from: root)
     }
     return nil
@@ -912,9 +1096,11 @@ final class GromoreAdManager: NSObject {
 
     func splashAdWillShow(_ splashAd: BUSplashAd) {
       manager?.emitLog("info", "splash will show: \(adId)", "ad")
+      manager?.scheduleSdkConstraintRepair()
     }
 
     func splashAdDidShow(_ splashAd: BUSplashAd) {
+      manager?.scheduleSdkConstraintRepair()
       manager?.emitAdShown(adId: adId, adType: "splash", placementId: placementId)
     }
 

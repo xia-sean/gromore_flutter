@@ -16,12 +16,12 @@ GroMore Flutter plugin for Android/iOS (Pangle mediation).
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
   # GroMore 依赖（穿山甲 iOS 融合 SDK）
-  s.dependency 'Ads-CN-Beta', '7.5.0.4'
+  s.dependency 'Ads-CN-Beta', '7.4.0.1'
   s.subspec 'BUAdSDK' do |cs|
-    cs.dependency 'Ads-CN-Beta/BUAdSDK', '7.5.0.4'
+    cs.dependency 'Ads-CN-Beta/BUAdSDK', '7.4.0.1'
   end
   s.subspec 'CSJMediation' do |cs|
-    cs.dependency 'Ads-CN-Beta/CSJMediation', '7.5.0.4'
+    cs.dependency 'Ads-CN-Beta/CSJMediation', '7.4.0.1'
   end
   s.static_framework = true
   s.platform = :ios, '12.0'

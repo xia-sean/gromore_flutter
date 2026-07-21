@@ -75,7 +75,7 @@ android {
 
     dependencies {
         // GroMore 核心 SDK（官方 Maven）
-        implementation("com.pangle_beta.cn:mediation-sdk:7.5.1.0")
+        implementation("com.pangle_beta.cn:mediation-sdk:7.6.4.3")
         // GroMore 适配器（按 GM_ADNS 选择）
         if (GM_ADNS.contains("gdt")) {
             implementation("com.pangle_beta.cn:mediation-gdt-adapter:4.670.1540.0")
@@ -94,11 +94,11 @@ android {
         }
 
         // GroMore 测试工具（Debug 专用）
-        debugImplementation("com.pangle_beta.cn:mediation-test-tools:7.5.1.0")
+        debugImplementation("com.pangle_beta.cn:mediation-test-tools:7.6.1.1")
         // 测试工具资源依赖（statusBarBackground 等）
         debugImplementation("androidx.coordinatorlayout:coordinatorlayout:1.2.0")
         // 编译期占位，避免 Release 编译缺失类
-        compileOnly("com.pangle_beta.cn:mediation-test-tools:7.5.1.0")
+        compileOnly("com.pangle_beta.cn:mediation-test-tools:7.6.1.1")
 
         // OkHttp（SDK 依赖）
         implementation("com.squareup.okhttp3:okhttp:3.12.1")

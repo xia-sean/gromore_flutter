@@ -1,21 +1,91 @@
-MIT License
+Gromore Flutter Source-Available License
+Copyright (c) 2026 xia-sean
 
-Copyright (c) 2026 Gromore Flutter
+1. Definitions
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+"Software" means this repository, including its source code, examples,
+documentation, assets, build scripts, and releases.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+"Maintainer" means the copyright holder(s) of the Software.
+
+"Contribution Fork" means a copy or fork of the Software created solely for:
+(a) reviewing the source code,
+(b) testing or evaluating the Software,
+(c) preparing bug fixes, patches, or improvements,
+(d) submitting those changes back to the Maintainer through a pull request.
+
+2. Limited Permission Grant
+
+Subject to this License, the Maintainer grants you a limited, revocable,
+non-exclusive, non-transferable, non-sublicensable license to:
+
+(a) view, clone, and fork the Software;
+(b) use and modify the Software internally for evaluation, testing, and
+    contribution purposes;
+(c) create and maintain a Contribution Fork only for the purpose of submitting
+    changes back to the Maintainer.
+
+3. Contribution Permission
+
+You may modify the Software and submit issues, patches, and pull requests to
+the Maintainer.
+
+Unless separately agreed in writing, by submitting a contribution, you grant
+the Maintainer a perpetual, worldwide, non-exclusive, royalty-free license to
+use, modify, distribute, sublicense, and relicense your contribution as part
+of the Software.
+
+4. Restrictions
+
+Except as expressly permitted in Section 2 and Section 3, you may not:
+
+(a) distribute, publish, sublicense, sell, rent, lease, or otherwise make the
+    Software or any modified version available to any third party;
+(b) release, publish, or distribute a fork, derivative work, competing plugin,
+    renamed plugin, or substantially similar product based on the Software;
+(c) use the Software or any modified version of it as the basis of a public or
+    commercial plugin, SDK, package, service, or product;
+(d) remove, alter, or obscure any copyright, attribution, license, or
+    proprietary notice in the Software;
+(e) represent your fork or derivative work as an official version of the
+    Software.
+
+For clarity, creating a fork on GitHub or another code hosting platform is
+permitted only when that fork is used as a Contribution Fork under this
+License.
+
+5. Trademark and Branding
+
+This License does not grant any right to use the Maintainer's name, product
+name, package name, logo, icon, brand, or trademark, except to make accurate
+reference to the Software for contribution purposes.
+
+6. Ownership
+
+The Software is licensed, not sold. All rights not expressly granted under
+this License are reserved by the Maintainer.
+
+7. Termination
+
+This License terminates automatically if you violate any term of this License.
+Upon termination, you must stop using and distributing the Software and delete
+all copies under your control, except to the extent retention is required by
+law.
+
+8. No Warranty
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.
+
+9. Limitation of Liability
+
+TO THE MAXIMUM EXTENT PERMITTED BY LAW, THE MAINTAINER SHALL NOT BE LIABLE FOR
+ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT,
+OR OTHERWISE, ARISING FROM OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
+OTHER DEALINGS IN THE SOFTWARE.
+
+10. Governing Terms
+
+If any provision of this License is held unenforceable, the remaining
+provisions will remain in effect to the maximum extent permitted by law.

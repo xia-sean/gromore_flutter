@@ -4,7 +4,7 @@
 
 ![pub](https://img.shields.io/pub/v/gromore_flutter?label=pub&color=blue)
 ![platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS-4CAF50)
-![license](https://img.shields.io/badge/license-MIT-9C27B0)
+![license](https://img.shields.io/badge/license-Source--Available-9C27B0)
 ![repo](https://img.shields.io/badge/github-xia--sean%2Fgromore__flutter-black)
 
 # 📱 Flutter GroMore Ads
@@ -17,6 +17,10 @@
 邮箱📬 xm_sean@163.com
 
 </div>
+
+> 中文：本仓库为源码可见项目。允许 fork 仅用于评估、测试、修复问题并通过 Pull Request 回馈主仓库；不允许将本项目或修改版本重新发布为独立插件、SDK、package 或竞品。详见 [LICENSE](LICENSE)、[LICENSE.zh-CN.md](LICENSE.zh-CN.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。
+>
+> English: This repository is source-available. Forks are permitted only for evaluation, testing, bug fixing, and contributing back via pull requests. Republishing this project or any modified version as a separate plugin, SDK, package, or competing product is not permitted. See [LICENSE](LICENSE), [LICENSE.zh-CN.md](LICENSE.zh-CN.md), and [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## 🚀 核心功能
 
@@ -52,7 +56,7 @@
 ## 📱 最低系统版本
 
 - Android：minSdk 24（Android 7.0）
-- iOS：12.0
+- iOS：13.0
 
 ## 🕐 状态
 
@@ -66,7 +70,7 @@ SDK 具体版本见下方“当前内置的官方 SDK 版本”。
 
 ```yaml
 dependencies:
-  gromore_flutter: ^2.1.8
+  gromore_flutter: ^2.1.9
 ```
 
 ## 🔜 快速开始（4 步）
@@ -108,12 +112,12 @@ Android 端默认不引入任何 Adapter（仅 GroMore 核心）；可通过 `GM
 
 **iOS（Pod）**
 
-- GroMore 核心：`Ads-CN-Beta 7.5.0.4`（含 `BUAdSDK/CSJMediation`）
+- GroMore 核心：`Ads-CN-Beta 7.7.0.3`（含 `BUAdSDK/CSJMediation`）
 
 **Android（Maven）**
 
-- GroMore 核心：`com.pangle_beta.cn:mediation-sdk:7.5.1.0`
-- 测试工具（Debug）：`com.pangle_beta.cn:mediation-test-tools:7.5.1.0`
+- GroMore 核心：`com.pangle_beta.cn:mediation-sdk:7.6.4.3`
+- 测试工具（Debug）：`com.pangle_beta.cn:mediation-test-tools:7.6.1.1`
 
 **Android（已固定的 Adapter 版本）**
 

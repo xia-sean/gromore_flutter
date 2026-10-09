@@ -52,7 +52,7 @@
 
 ```yaml
 dependencies:
-  gromore_flutter: ^2.2.0
+  gromore_flutter: ^2.2.1
 ```
 
 执行：

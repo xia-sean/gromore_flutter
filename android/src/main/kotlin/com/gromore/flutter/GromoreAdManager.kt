@@ -32,6 +32,7 @@ import com.bytedance.sdk.openadsdk.TTNativeExpressAd
 import com.bytedance.sdk.openadsdk.TTRewardVideoAd
 import com.bytedance.sdk.openadsdk.mediation.ad.MediationViewBinder
 import com.bytedance.sdk.openadsdk.mediation.ad.MediationExpressRenderListener
+import com.bytedance.sdk.openadsdk.mediation.ad.IMediationNativeAdInfo
 import com.bytedance.sdk.openadsdk.mediation.manager.MediationAdEcpmInfo
 import java.net.URL
 import java.util.UUID
@@ -914,27 +915,43 @@ internal class GromoreAdManager(
       .logoLayoutId(R.id.gromore_feed_ad_badge)
       .build()
 
-    ad.registerViewForInteraction(
-      activity,
-      root as ViewGroup,
-      clickViews,
-      creativeViews,
-      emptyList(),
-      object : TTNativeAd.AdInteractionListener {
-        override fun onAdClicked(view: View, nativeAd: TTNativeAd) {
-          emitAdClicked(holder)
-        }
+    val interactionListener = object : TTNativeAd.AdInteractionListener {
+      override fun onAdClicked(view: View, nativeAd: TTNativeAd) {
+        emitAdClicked(holder)
+      }
 
-        override fun onAdCreativeClick(view: View, nativeAd: TTNativeAd) {
-          emitAdClicked(holder)
-        }
+      override fun onAdCreativeClick(view: View, nativeAd: TTNativeAd) {
+        emitAdClicked(holder)
+      }
 
-        override fun onAdShow(nativeAd: TTNativeAd) {
-          emitAdShownOnce(holder)
-        }
-      },
-      binder
-    )
+      override fun onAdShow(nativeAd: TTNativeAd) {
+        emitAdShownOnce(holder)
+      }
+    }
+
+    // GroMore 7.8 removed the legacy TTNativeAd overload that accepted an
+    // Activity and MediationViewBinder. Mediation native ads now expose the
+    // binder registration through IMediationNativeAdInfo; non-mediation ads
+    // continue to use TTNativeAd's standard registration API.
+    val mediationAd = ad as? IMediationNativeAdInfo
+    val rootGroup = root as ViewGroup
+    if (mediationAd != null) {
+      mediationAd.registerView(
+        activity,
+        rootGroup,
+        clickViews,
+        creativeViews,
+        emptyList(),
+        binder
+      )
+    } else {
+      ad.registerViewForInteraction(
+        rootGroup,
+        clickViews,
+        creativeViews,
+        interactionListener
+      )
+    }
     return root
   }
 

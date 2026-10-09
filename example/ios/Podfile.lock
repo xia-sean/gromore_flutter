@@ -1,16 +1,16 @@
 PODS:
-  - Ads-CN-Beta (7.7.0.3):
-    - Ads-CN-Beta/BUAdLive-Framework (= 7.7.0.3)
-    - Ads-CN-Beta/BUAdSDK (= 7.7.0.3)
-  - Ads-CN-Beta/BUAdLive (7.7.0.3)
-  - Ads-CN-Beta/BUAdLive-Framework (7.7.0.3):
+  - Ads-CN-Beta (7.8.0.5):
+    - Ads-CN-Beta/BUAdLive-Framework (= 7.8.0.5)
+    - Ads-CN-Beta/BUAdSDK (= 7.8.0.5)
+  - Ads-CN-Beta/BUAdLive (7.8.0.5)
+  - Ads-CN-Beta/BUAdLive-Framework (7.8.0.5):
     - Ads-CN-Beta/BUAdLive
     - BUTTSDKFramework/LivePull-Lite (= 1.48.2.3-premium)
-  - Ads-CN-Beta/BUAdSDK (7.7.0.3)
-  - Ads-CN-Beta/CSJMediation (7.7.0.3):
+  - Ads-CN-Beta/BUAdSDK (7.8.0.5)
+  - Ads-CN-Beta/CSJMediation (7.8.0.5):
     - Ads-CN-Beta/BUAdLive-Framework
     - Ads-CN-Beta/CSJMediation-Only
-  - Ads-CN-Beta/CSJMediation-Only (7.7.0.3):
+  - Ads-CN-Beta/CSJMediation-Only (7.8.0.5):
     - Ads-CN-Beta/BUAdSDK
   - BUTTSDKFramework/Core (1.48.2.3-premium)
   - BUTTSDKFramework/LiveBase (1.48.2.3-premium):
@@ -44,22 +44,22 @@ PODS:
   - BUTTSDKFramework/TTFFmpeg/LiveLite (1.48.2.3-premium)
   - BUTTSDKFramework/VolcLog (1.48.2.3-premium)
   - Flutter (1.0.0)
-  - gromore_flutter (2.1.9):
-    - Ads-CN-Beta (= 7.7.0.3)
+  - gromore_flutter (2.2.0):
+    - Ads-CN-Beta (= 7.8.0.5)
     - Flutter
-    - gromore_flutter/BUAdSDK (= 2.1.9)
-    - gromore_flutter/CSJMediation (= 2.1.9)
-  - gromore_flutter/BUAdSDK (2.1.9):
-    - Ads-CN-Beta (= 7.7.0.3)
-    - Ads-CN-Beta/BUAdSDK (= 7.7.0.3)
+    - gromore_flutter/BUAdSDK (= 2.2.0)
+    - gromore_flutter/CSJMediation (= 2.2.0)
+  - gromore_flutter/BUAdSDK (2.2.0):
+    - Ads-CN-Beta (= 7.8.0.5)
+    - Ads-CN-Beta/BUAdSDK (= 7.8.0.5)
     - Flutter
-  - gromore_flutter/CSJMediation (2.1.9):
-    - Ads-CN-Beta (= 7.7.0.3)
-    - Ads-CN-Beta/CSJMediation (= 7.7.0.3)
+  - gromore_flutter/CSJMediation (2.2.0):
+    - Ads-CN-Beta (= 7.8.0.5)
+    - Ads-CN-Beta/CSJMediation (= 7.8.0.5)
     - Flutter
 
 DEPENDENCIES:
-  - Ads-CN-Beta/CSJMediation (= 7.7.0.3)
+  - Ads-CN-Beta/CSJMediation (= 7.8.0.5)
   - Flutter (from `Flutter`)
   - gromore_flutter (from `.symlinks/plugins/gromore_flutter/ios`)
 
@@ -75,11 +75,11 @@ EXTERNAL SOURCES:
     :path: ".symlinks/plugins/gromore_flutter/ios"
 
 SPEC CHECKSUMS:
-  Ads-CN-Beta: 5b1fe31c649807cebdee9bc47bb94eea8bf24a4f
+  Ads-CN-Beta: 3a6a494935b7b310103c190a3b4249f8461136b3
   BUTTSDKFramework: 34f8f8d541da07e79e9c479eb71336d1e4d90fdd
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  gromore_flutter: 3eb465af3a09f96ebfc64495afd8ed9cce643c0e
+  gromore_flutter: 3bd1fb10d0b911f23303cf0ff751ace17997fd4d
 
-PODFILE CHECKSUM: 836f318ea9fca503c4838d3d7dca971a5566bd9d
+PODFILE CHECKSUM: bd7e6033063869cdcf8fcc177d1d24c6b6677ca2
 
 COCOAPODS: 1.16.2

@@ -105,7 +105,7 @@ target 'Runner' do
   use_modular_headers!
 
   # GroMore iOS 融合 SDK（CSJMediation）
-  pod 'Ads-CN-Beta', '7.7.0.3', :subspecs => ['CSJMediation']
+  pod 'Ads-CN-Beta', '7.8.0.5', :subspecs => ['CSJMediation']
   # 引入使用到的 ADN SDK（按官方建议版本）
   GM_ADNS.each do |key|
     info = ADN_SDKS[key]

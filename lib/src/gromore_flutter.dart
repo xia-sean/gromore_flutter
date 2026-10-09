@@ -11,18 +11,15 @@ import 'ad_callbacks.dart';
 import 'config.dart';
 import 'init_result.dart';
 import 'logger.dart';
+import 'privacy.dart';
 import '../gromore_flutter_platform_interface.dart';
 
 /// GroMore Flutter 入口类
 ///
 /// 示例：
 /// ```dart
-/// final result = await GromoreFlutter.instance.init(
-///   const GromoreConfig(
-///     // Android 已通过 manifest meta-data 配置时可省略 androidAppId/androidAppName
-///     iosAppId: 'your_ios_app_id',
-///     iosAppName: 'your_ios_app_name',
-///   ),
+/// final result = await GromoreFlutter.instance.initialize(
+///   iosAppId: 'your_ios_app_id',
 /// );
 /// ```
 class GromoreFlutter {
@@ -123,6 +120,24 @@ class GromoreFlutter {
     return const InitResult(
       android: PlatformInitResult.skipped(reason: 'unsupported_platform'),
       ios: PlatformInitResult.skipped(reason: 'unsupported_platform'),
+    );
+  }
+
+  /// 快速初始化入口。
+  ///
+  /// 普通接入只需要传入当前平台的 AppId。需要配置日志、广告类型、
+  /// 多进程或平台扩展参数时，继续使用 [init] 和 [GromoreConfig]。
+  Future<InitResult> initialize({
+    String? androidAppId,
+    String? iosAppId,
+    GromorePrivacyConfig? privacy,
+  }) {
+    return init(
+      GromoreConfig(
+        androidAppId: androidAppId,
+        iosAppId: iosAppId,
+        privacy: privacy,
+      ),
     );
   }
 

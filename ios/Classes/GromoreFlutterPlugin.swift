@@ -95,7 +95,28 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
     let appId = args?["iosAppId"] as? String
     let debug = args?["debug"] as? Bool ?? false
     let useMediation = args?["useMediation"] as? Bool ?? true
-    let iosOptions = args?["iosOptions"] as? [String: Any] ?? [:]
+    var iosOptions = args?["iosOptions"] as? [String: Any] ?? [:]
+    if let topLevelPrivacy = args?["privacy"] as? [String: Any], !topLevelPrivacy.isEmpty {
+      var privacy = topLevelPrivacy
+      if let explicitPrivacy = iosOptions["privacy"] as? [String: Any] {
+        privacy.merge(explicitPrivacy) { _, explicit in explicit }
+      }
+      iosOptions["privacy"] = privacy
+      // iOS 将个性化广告限制配置放在 mediation 下；把通用隐私配置
+      // 映射到对应字段，同时保留 iosOptions.mediation 的显式优先级。
+      var mediation = iosOptions["mediation"] as? [String: Any] ?? [:]
+      if mediation["limitPersonalAds"] == nil,
+         let limitPersonalAds = privacyBool(privacy, key: "limitPersonalAds") {
+        mediation["limitPersonalAds"] = NSNumber(value: limitPersonalAds ? 1 : 0)
+      }
+      if mediation["limitProgrammaticAds"] == nil,
+         let programmaticRecommend = privacyBool(privacy, key: "programmaticRecommend") {
+        mediation["limitProgrammaticAds"] = NSNumber(value: programmaticRecommend ? 0 : 1)
+      }
+      if !mediation.isEmpty {
+        iosOptions["mediation"] = mediation
+      }
+    }
     if let enableLog = args?["enableLog"] as? Bool {
       logEnabled = enableLog
     }
@@ -391,6 +412,26 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
     }
   }
 
+  private func privacyBool(_ options: [String: Any], key: String) -> Bool? {
+    switch options[key] {
+    case let value as Bool:
+      return value
+    case let value as NSNumber:
+      return value.boolValue
+    case let value as String:
+      switch value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+      case "true", "1", "yes":
+        return true
+      case "false", "0", "no":
+        return false
+      default:
+        return nil
+      }
+    default:
+      return nil
+    }
+  }
+
   private func buildSegmentInfo(_ raw: [String: Any]?) -> BUMUserInfoForSegment? {
     guard let raw else { return nil }
     let info = BUMUserInfoForSegment()
@@ -564,7 +605,7 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
     }
 
     func canUseLocation() -> Bool {
-      return readBool("canUseLocation") ?? true
+      return readBool("canUseLocation") ?? !isCollectionDisabled
     }
 
     func latitude() -> CLLocationDegrees {
@@ -576,7 +617,7 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
     }
 
     func canUseWiFiBSSID() -> Bool {
-      return readBool("canUseWiFiBSSID") ?? true
+      return readBool("canUseWiFiBSSID") ?? !isCollectionDisabled
     }
 
     func privacyConfig() -> [AnyHashable : Any]? {
@@ -601,6 +642,10 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
       default:
         return nil
       }
+    }
+
+    private var isCollectionDisabled: Bool {
+      readBool("disableCollection") == true
     }
 
     private func readDouble(_ key: String) -> Double? {

@@ -74,6 +74,24 @@ class MockGromoreFlutterPlatform
 
 /// 单元测试入口
 void main() {
+  test('privacy config can disable collection', () {
+    const config = GromoreConfig(privacy: GromorePrivacyConfig.disableAll());
+    expect(config.toMap()['privacy'], <String, dynamic>{
+      'disableCollection': true,
+      'canUseLocation': false,
+      'canUsePhoneState': false,
+      'canUseWifiState': false,
+      'canUseWriteExternal': false,
+      'canUseAndroidId': false,
+      'canUseOaid': false,
+      'canUseRecordAudio': false,
+      'canUseMessage': false,
+      'limitPersonalAds': true,
+      'programmaticRecommend': false,
+      'canUseWiFiBSSID': false,
+    });
+  });
+
   /// 记录初始平台实现
   final GromoreFlutterPlatform initialPlatform =
       GromoreFlutterPlatform.instance;
@@ -93,6 +111,20 @@ void main() {
         androidAppId: 'test',
         androidAppName: 'test',
       ),
+    );
+    debugDefaultTargetPlatformOverride = null;
+
+    expect(result.android.success, isTrue);
+  });
+
+  test('initialize provides a minimal app id entry point', () async {
+    final MockGromoreFlutterPlatform fakePlatform =
+        MockGromoreFlutterPlatform();
+    GromoreFlutterPlatform.instance = fakePlatform;
+
+    debugDefaultTargetPlatformOverride = TargetPlatform.android;
+    final result = await GromoreFlutter.instance.initialize(
+      androidAppId: 'test',
     );
     debugDefaultTargetPlatformOverride = null;
 

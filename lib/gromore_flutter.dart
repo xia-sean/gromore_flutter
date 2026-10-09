@@ -13,4 +13,5 @@ export 'src/config.dart';
 export 'src/gromore_flutter.dart';
 export 'src/init_result.dart';
 export 'src/logger.dart';
+export 'src/privacy.dart';
 export 'src/visibility.dart';

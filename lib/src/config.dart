@@ -1,4 +1,5 @@
 import 'ad_types.dart';
+import 'privacy.dart';
 
 /// GroMore 初始化配置
 class GromoreConfig {
@@ -35,6 +36,7 @@ class GromoreConfig {
     },
     this.androidOptions,
     this.iosOptions,
+    this.privacy,
     this.enableLog,
     this.enableLogToFile = false,
   });
@@ -66,6 +68,9 @@ class GromoreConfig {
   /// iOS 平台扩展参数
   final Map<String, dynamic>? iosOptions;
 
+  /// 跨平台隐私采集配置。平台专属 options 中同名字段优先。
+  final GromorePrivacyConfig? privacy;
+
   /// 是否启用日志（不传则 Debug 默认开、Release 默认关）
   final bool? enableLog;
 
@@ -85,6 +90,7 @@ class GromoreConfig {
       'enabledAdTypes': enabledAdTypes.map((type) => type.value).toList(),
       'androidOptions': androidOptions,
       'iosOptions': iosOptions,
+      'privacy': privacy?.toMap(),
       'enableLog': enableLog,
       'enableLogToFile': enableLogToFile,
     };

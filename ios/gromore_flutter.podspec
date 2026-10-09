@@ -4,7 +4,7 @@
 #
 Pod::Spec.new do |s|
   s.name             = 'gromore_flutter'
-  s.version          = '2.1.9'
+  s.version          = '2.2.0'
   s.summary          = 'GroMore Flutter plugin for Android/iOS.'
   s.description      = <<-DESC
 GroMore Flutter plugin for Android/iOS (Pangle mediation).
@@ -16,12 +16,12 @@ GroMore Flutter plugin for Android/iOS (Pangle mediation).
   s.source_files = 'Classes/**/*'
   s.dependency 'Flutter'
   # GroMore 依赖（穿山甲 iOS 融合 SDK）
-  s.dependency 'Ads-CN-Beta', '7.7.0.3'
+  s.dependency 'Ads-CN-Beta', '7.8.0.5'
   s.subspec 'BUAdSDK' do |cs|
-    cs.dependency 'Ads-CN-Beta/BUAdSDK', '7.7.0.3'
+    cs.dependency 'Ads-CN-Beta/BUAdSDK', '7.8.0.5'
   end
   s.subspec 'CSJMediation' do |cs|
-    cs.dependency 'Ads-CN-Beta/CSJMediation', '7.7.0.3'
+    cs.dependency 'Ads-CN-Beta/CSJMediation', '7.8.0.5'
   end
   s.static_framework = true
   s.platform = :ios, '13.0'

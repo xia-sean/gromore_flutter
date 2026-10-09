@@ -118,6 +118,7 @@ internal class GromoreAdManager(
    */
   fun disposeAd(adId: String) {
     val holder = adHolders.remove(adId) ?: return
+    holder.disposed = true
     when (holder) {
       is SplashAdHolder -> holder.ad?.mediationManager?.destroy()
       is RewardAdHolder -> holder.ad?.mediationManager?.destroy()
@@ -243,7 +244,7 @@ internal class GromoreAdManager(
     val splashListener = object : CSJSplashAd.SplashAdListener {
       override fun onSplashAdShow(ad: CSJSplashAd?) {
         emitLog("info", "splash shown: ${holder.adId}", "ad")
-        emitAdShown(holder)
+        emitAdShownOnce(holder)
       }
 
       override fun onSplashAdClick(ad: CSJSplashAd?) {
@@ -263,28 +264,35 @@ internal class GromoreAdManager(
           CSJSplashCloseType.CLICK_JUMP -> "click_jump"
           else -> closeType.toString()
         }
-        emitAdClosed(holder, mapOf("closeType" to closeTypeName))
+        emitAdClosedOnce(holder, mapOf("closeType" to closeTypeName))
       }
     }
     holder.showListener = splashListener
     ad.setSplashAdListener(splashListener)
 
-    val splashView = ad.splashView ?: return
     val container = FrameLayout(activity)
     container.layoutParams = FrameLayout.LayoutParams(
       ViewGroup.LayoutParams.MATCH_PARENT,
       ViewGroup.LayoutParams.MATCH_PARENT
     )
-    container.addView(
-      splashView,
-      FrameLayout.LayoutParams(
-        ViewGroup.LayoutParams.MATCH_PARENT,
-        ViewGroup.LayoutParams.MATCH_PARENT
-      )
-    )
     holder.container = container
     val decorView = activity.window.decorView as? ViewGroup
-    decorView?.addView(container)
+    if (decorView == null) {
+      emitLog("error", "showSplashAd failed: decor view is null", "ad")
+      return
+    }
+    // 使用 SDK 的 showSplashView，而不是手动把 splashView 加到窗口。
+    // 部分聚合广告源（如优量汇）只有在该入口中才会触发展示回调。
+    decorView.addView(container)
+    ad.showSplashView(container)
+    // 个别广告源不会转发 CSJSplashAd.SplashAdListener.onSplashAdShow，
+    // 用一次性兜底保证 Flutter 侧仍能收到 onShown；正常回调先到时不会重复。
+    mainHandler.postDelayed({
+      if (!holder.disposed && !holder.shownEventSent && !holder.closeEventSent) {
+        emitLog("warn", "splash show callback missing; emitting fallback shown: ${holder.adId}", "ad")
+        emitAdShownOnce(holder)
+      }
+    }, 500L)
   }
 
   /** 加载激励视频广告 */
@@ -344,7 +352,7 @@ internal class GromoreAdManager(
     val interactionListener = object : TTRewardVideoAd.RewardAdInteractionListener {
       override fun onAdShow() {
         emitLog("info", "reward shown: ${holder.adId}", "ad")
-        emitAdShown(holder)
+        emitAdShownOnce(holder)
       }
 
       override fun onAdVideoBarClick() {
@@ -455,7 +463,7 @@ internal class GromoreAdManager(
     val interactionListener = object : TTFullScreenVideoAd.FullScreenVideoAdInteractionListener {
       override fun onAdShow() {
         emitLog("info", "fullscreen shown: ${holder.adId}", "ad")
-        emitAdShown(holder)
+        emitAdShownOnce(holder)
       }
 
       override fun onAdVideoBarClick() {
@@ -536,7 +544,7 @@ internal class GromoreAdManager(
       }
 
       override fun onAdShow(view: View?, type: Int) {
-        emitAdShown(holder)
+        emitAdShownOnce(holder)
       }
 
       override fun onRenderFail(view: View?, msg: String?, code: Int) {
@@ -555,7 +563,7 @@ internal class GromoreAdManager(
 
       override fun onSelected(position: Int, value: String?, enforce: Boolean) {
         emitLog("info", "banner dislike selected: ${holder.adId}", "ad")
-        emitAdClosed(holder, mapOf("dislike" to true, "value" to value))
+        emitAdClosedOnce(holder, mapOf("dislike" to true, "value" to value))
         holder.container?.removeAllViews()
       }
 
@@ -641,7 +649,7 @@ internal class GromoreAdManager(
             }
 
             override fun onAdShow() {
-              emitAdShown(holder)
+              emitAdShownOnce(holder)
             }
           }
           holder.renderListener = renderListener
@@ -720,7 +728,7 @@ internal class GromoreAdManager(
             }
 
             override fun onAdShow() {
-              emitAdShown(holder)
+              emitAdShownOnce(holder)
             }
           }
           holder.renderListener = renderListener
@@ -811,7 +819,7 @@ internal class GromoreAdManager(
 
       override fun onSelected(position: Int, value: String?, enforce: Boolean) {
         emitLog("info", "feed dislike selected: ${holder.adId}", "ad")
-        emitAdClosed(holder, mapOf("dislike" to true, "value" to value))
+        emitAdClosedOnce(holder, mapOf("dislike" to true, "value" to value))
         holder.container?.removeAllViews()
       }
 
@@ -872,6 +880,9 @@ internal class GromoreAdManager(
     }
 
     closeView.setOnClickListener {
+      // 自渲染信息流的关闭按钮不一定经过 SDK dislike 回调，先把用户关闭动作
+      // 透传到 Flutter；onSelected 到达时由 emitAdClosedOnce 去重。
+      emitAdClosedOnce(holder, mapOf("dislike" to true, "source" to "close_button"))
       ad.getDislikeDialog(activity)?.showDislikeDialog()
     }
 
@@ -919,7 +930,7 @@ internal class GromoreAdManager(
         }
 
         override fun onAdShow(nativeAd: TTNativeAd) {
-          emitAdShown(holder)
+          emitAdShownOnce(holder)
         }
       },
       binder
@@ -977,7 +988,7 @@ internal class GromoreAdManager(
         }
 
         override fun onAdShow(nativeAd: TTNativeAd) {
-          emitAdShown(holder)
+          emitAdShownOnce(holder)
         }
       }
     )
@@ -1106,6 +1117,13 @@ internal class GromoreAdManager(
     )
   }
 
+  /** 广告展示事件（同一广告实例只上报一次，兼容聚合源重复/缺失回调）。 */
+  private fun emitAdShownOnce(holder: GromoreAdHolder) {
+    if (holder.shownEventSent) return
+    holder.shownEventSent = true
+    emitAdShown(holder)
+  }
+
   /** 广告模板渲染完成事件（返回真实渲染尺寸） */
   private fun emitAdRendered(holder: GromoreAdHolder, width: Float, height: Float) {
     postAdEvent(
@@ -1145,6 +1163,13 @@ internal class GromoreAdManager(
         "data" to data
       )
     )
+  }
+
+  /** 信息流关闭事件去重。 */
+  private fun emitAdClosedOnce(holder: GromoreAdHolder, data: Map<String, Any?>? = null) {
+    if (holder.closeEventSent) return
+    holder.closeEventSent = true
+    emitAdClosed(holder, data)
   }
 
   /** 激励到账事件 */
@@ -1296,6 +1321,15 @@ internal class GromoreAdManager(
 
     /** 当前绑定的容器视图 */
     var container: FrameLayout? = null
+
+    /** 展示事件是否已上报 */
+    var shownEventSent: Boolean = false
+
+    /** 广告实例是否已销毁 */
+    var disposed: Boolean = false
+
+    /** 关闭事件是否已上报 */
+    var closeEventSent: Boolean = false
   }
 
   /** 开屏广告实例 */

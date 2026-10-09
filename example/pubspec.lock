@@ -131,7 +131,7 @@ packages:
       path: ".."
       relative: true
     source: path
-    version: "2.1.9"
+    version: "2.2.0"
   hooks:
     dependency: transitive
     description:

@@ -63,6 +63,7 @@ internal object GromoreFlutterInitializer {
     val explicitDebug = readBoolean(args, "debug")
     val explicitUseMediation = readBoolean(args, "useMediation")
     val explicitOptions = args["androidOptions"] as? Map<*, *> ?: emptyMap<Any, Any>()
+    val topLevelPrivacy = args["privacy"] as? Map<*, *> ?: emptyMap<Any, Any>()
 
     val appId = explicitAppId ?: manifestConfig?.appId
     val appName = (explicitAppName ?: manifestConfig?.appName ?: resolveDefaultAppName(context))
@@ -81,10 +82,25 @@ internal object GromoreFlutterInitializer {
       }
     }
 
+    // 允许 Flutter 侧通过 GromorePrivacyConfig 传入跨平台隐私配置；
+    // androidOptions.privacy 中的同名字段优先，兼容原有 map 用法。
+    val explicitPrivacy = explicitOptions["privacy"] as? Map<*, *> ?: emptyMap<Any, Any>()
+    if (topLevelPrivacy.isNotEmpty() || explicitPrivacy.isNotEmpty()) {
+      val mergedPrivacy = mutableMapOf<String, Any?>()
+      topLevelPrivacy.forEach { (key, value) ->
+        if (key != null) mergedPrivacy[key.toString()] = value
+      }
+      explicitPrivacy.forEach { (key, value) ->
+        if (key != null) mergedPrivacy[key.toString()] = value
+      }
+      androidOptions["privacy"] = mergedPrivacy
+    }
+
     val hasExplicitConfig = explicitAppId != null ||
       explicitAppName != null ||
       explicitDebug != null ||
       explicitUseMediation != null ||
+      topLevelPrivacy.isNotEmpty() ||
       explicitOptions.isNotEmpty()
 
     val source = when {
@@ -369,10 +385,11 @@ internal object GromoreFlutterInitializer {
     val privacy = androidOptions["privacy"] as? Map<*, *> ?: emptyMap<Any, Any>()
     return object : TTCustomController() {
       override fun isCanUseLocation(): Boolean {
-        return readBoolean(privacy, "canUseLocation") ?: super.isCanUseLocation()
+        return privacyBoolean(privacy, "canUseLocation") ?: super.isCanUseLocation()
       }
 
       override fun getTTLocation(): LocationProvider? {
+        if (privacyBoolean(privacy, "canUseLocation") == false) return null
         val latitude = readDouble(privacy, "latitude")
         val longitude = readDouble(privacy, "longitude")
         if (latitude == null || longitude == null) {
@@ -385,47 +402,51 @@ internal object GromoreFlutterInitializer {
       }
 
       override fun alist(): Boolean {
-        return readBoolean(privacy, "alist") ?: super.alist()
+        return privacyBoolean(privacy, "alist") ?: super.alist()
       }
 
       override fun isCanUsePhoneState(): Boolean {
-        return readBoolean(privacy, "canUsePhoneState") ?: super.isCanUsePhoneState()
+        return privacyBoolean(privacy, "canUsePhoneState") ?: super.isCanUsePhoneState()
       }
 
       override fun getDevImei(): String? {
+        if (privacyBoolean(privacy, "canUsePhoneState") == false) return null
         return readString(privacy, "imei") ?: super.getDevImei()
       }
 
       override fun isCanUseWifiState(): Boolean {
-        return readBoolean(privacy, "canUseWifiState") ?: super.isCanUseWifiState()
+        return privacyBoolean(privacy, "canUseWifiState") ?: super.isCanUseWifiState()
       }
 
       override fun getMacAddress(): String? {
+        if (privacyBoolean(privacy, "canUseWifiState") == false) return null
         return readString(privacy, "macAddress") ?: super.getMacAddress()
       }
 
       override fun isCanUseWriteExternal(): Boolean {
-        return readBoolean(privacy, "canUseWriteExternal") ?: super.isCanUseWriteExternal()
+        return privacyBoolean(privacy, "canUseWriteExternal") ?: super.isCanUseWriteExternal()
       }
 
       override fun getDevOaid(): String? {
+        if (privacyBoolean(privacy, "canUseOaid") == false) return null
         return readString(privacy, "oaid") ?: super.getDevOaid()
       }
 
       override fun isCanUseAndroidId(): Boolean {
-        return readBoolean(privacy, "canUseAndroidId") ?: super.isCanUseAndroidId()
+        return privacyBoolean(privacy, "canUseAndroidId") ?: super.isCanUseAndroidId()
       }
 
       override fun getAndroidId(): String? {
+        if (privacyBoolean(privacy, "canUseAndroidId") == false) return null
         return readString(privacy, "androidId") ?: super.getAndroidId()
       }
 
       override fun isCanUsePermissionRecordAudio(): Boolean {
-        return readBoolean(privacy, "canUseRecordAudio") ?: super.isCanUsePermissionRecordAudio()
+        return privacyBoolean(privacy, "canUseRecordAudio") ?: super.isCanUsePermissionRecordAudio()
       }
 
       override fun isCanUseMessage(): Boolean {
-        return readBoolean(privacy, "canUseMessage") ?: super.isCanUseMessage()
+        return privacyBoolean(privacy, "canUseMessage") ?: super.isCanUseMessage()
       }
 
       override fun getMediationPrivacyConfig(): MediationPrivacyConfig {
@@ -443,15 +464,15 @@ internal object GromoreFlutterInitializer {
           }
 
           override fun isCanUseOaid(): Boolean {
-            return readBoolean(privacy, "canUseOaid") ?: super.isCanUseOaid()
+            return privacyBoolean(privacy, "canUseOaid") ?: super.isCanUseOaid()
           }
 
           override fun isLimitPersonalAds(): Boolean {
-            return readBoolean(privacy, "limitPersonalAds") ?: super.isLimitPersonalAds()
+            return privacyBoolean(privacy, "limitPersonalAds") ?: super.isLimitPersonalAds()
           }
 
           override fun isProgrammaticRecommend(): Boolean {
-            return readBoolean(privacy, "programmaticRecommend") ?: super.isProgrammaticRecommend()
+            return privacyBoolean(privacy, "programmaticRecommend") ?: super.isProgrammaticRecommend()
           }
         }
       }
@@ -462,6 +483,12 @@ internal object GromoreFlutterInitializer {
         return map
       }
     }
+  }
+
+  /** 当调用方开启 disableCollection 时，所有未单独配置的采集开关均关闭。 */
+  private fun privacyBoolean(source: Map<*, *>, key: String): Boolean? {
+    return readBoolean(source, key)
+      ?: if (readBoolean(source, "disableCollection") == true) false else null
   }
 
   private fun buildMediationConfig(androidOptions: Map<*, *>): MediationConfig? {

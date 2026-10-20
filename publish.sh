@@ -126,11 +126,17 @@ update_file(
 )
 
 # README 安装示例版本（可选）
-update_file(
-    root / "README.md",
-    r"gromore_flutter:\s*\^[0-9]+\.[0-9]+\.[0-9]+(?:[+-][0-9A-Za-z.-]+)?",
-    f"gromore_flutter: ^{version}",
-)
+for readme_path in (root / "README.md", root / "doc" / "README.zh-CN.md"):
+    update_file(
+        readme_path,
+        r"gromore_flutter:\s*\^[0-9]+\.[0-9]+\.[0-9]+(?:[+-][0-9A-Za-z.-]+)?",
+        f"gromore_flutter: ^{version}",
+    )
+    update_file(
+        readme_path,
+        r"((?:Current plugin version: |当前插件版本：)`)[^`]+(`)",
+        rf"\g<1>{version}\2",
+    )
 
 # CHANGELOG（必需：校验顶部版本块与脚本读取结果一致）
 changelog_path = root / "CHANGELOG.md"

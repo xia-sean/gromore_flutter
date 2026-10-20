@@ -128,36 +128,91 @@ await GromoreFullscreenVideo.dispose(adId);
 
 ## 🎁 激励视频
 
+完整流程：监听广告事件 → 加载 → 加载成功后展示 → 关闭后释放。
+
 ```dart
-final adId = await GromoreReward.load(
-  const GromoreRewardConfig(
-    placementId: 'your_reward_placement_id',
-    rewardName: '金币',
-    rewardAmount: 1,
-    customData: 'your_server_verify_data',
-  ),
-);
+import 'dart:convert';
 
 final subscription = GromoreReward.listen(
-  adId: adId,
   callback: GromoreAdCallback(
-    onShown: (_) => debugPrint('reward shown'),
-    onCompleted: (_) => debugPrint('reward video completed'),
-    onRewarded: (event) {
-      debugPrint('reward: ${event.rewardAmount} ${event.rewardName}');
-      // 建议结合服务端校验结果发放奖励。
-    },
-    onClosed: (_) => debugPrint('reward closed'),
-    onFailed: (event) => debugPrint('reward failed: ${event.errorMessage}'),
+    onLoaded: (event) => GromoreReward.show(event.adId),
+    onRewarded: (_) => debugPrint('Reward video completed'),
+    onClosed: (event) => GromoreReward.dispose(event.adId),
+    onFailed: (event) => debugPrint('Reward video failed：${event.errorMessage}'),
   ),
 );
 
-await GromoreReward.show(adId);
-await subscription.cancel();
-await GromoreReward.dispose(adId);
+final adId = await GromoreReward.load(
+  GromoreRewardConfig(
+    placementId: 'your_reward_video_placement_id',
+    userId: 'user_123',
+    customData: jsonEncode({'orderId': 'order_456'}),
+  ),
+);
 ```
 
-`onRewarded` 表示 SDK 回调了激励事件，不等同于服务端校验成功。涉及虚拟物品时请以服务端校验为准。
+- `placementId`：填写 GroMore 后台的广告位 ID。
+- `userId`：你自己的用户 ID，让服务器知道给谁发奖励。
+- `customData`：你希望服务器收到的业务数据，比如订单号。
+- 页面退出时取消监听：`await subscription.cancel()`；未关闭的广告也要调用 `dispose(adId)`。
+
+这个示例的监听会处理所有激励广告事件；同时管理多个广告时，需按 `adId` 区分。
+
+### 服务器会收到什么？
+
+先在 GroMore 广告位设置中配置“服务端激励回调”地址。使用上面的参数后，回调中对应的是：
+
+```text
+user_id = user_123
+extra = {"orderId":"order_456"}
+```
+
+`onRewarded` 只是客户端事件。真正发放奖励时，请由服务器验签并按 `trans_id` 去重。
+不要在 GroMore 和广告来源后台重复配置两套奖励发放回调。
+
+### extra、androidExtra、iosExtra 怎么选？
+
+**通常不用填它们，直接使用 `userId`、`customData`、`muted` 等字段即可。**
+
+| 参数 | 一句话解释 |
+| --- | --- |
+| `extra` | 两端都使用的广告参数 |
+| `androidExtra` | 只给 Android 使用的广告参数 |
+| `iosExtra` | 只给 iOS 使用的广告参数 |
+| `customData` | 要让服务器收到的业务数据 |
+
+例如，只想在 Android 上静音：
+
+```dart
+const config = GromoreRewardConfig(
+  placementId: '你的激励广告位ID',
+  androidExtra: {'muted': true},
+);
+```
+
+注意两点：
+
+- 三个 Map 只支持插件已定义的参数。写 `extra: {'orderId': '123'}` 不会把订单号发给服务器；请用 `customData: jsonEncode({'orderId': '123'})`。
+- 同一个参数不要重复填写。重名时沿用旧规则：`extra` > 普通字段 > 当前平台 Extra。
+
+广告请求只使用 `androidExtra`、`iosExtra`，不再接受旧的 options 名称。
+这里改名的是**广告请求参数**，初始化配置 `GromoreConfig` 的字段名不变。
+
+### 以前用 GromoreAdRequest 怎么写？
+
+仍然支持，只需把业务数据放到 `customData`：
+
+```dart
+final request = GromoreAdRequest(
+  placementId: '你的激励广告位ID',
+  extra: {
+    'userId': 'user_123',
+    'customData': jsonEncode({'orderId': 'order_456'}),
+  },
+);
+```
+
+这里的 `extra` 是广告参数 Map；服务器收到的 `extra` 是 `customData` 字符串，二者不是一回事。
 
 ## 📌 Banner
 

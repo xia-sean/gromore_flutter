@@ -1,27 +1,34 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-
+import 'package:gromore_flutter/gromore_flutter.dart';
 import 'package:gromore_flutter_example/main.dart';
 
 void main() {
-  testWidgets('Verify Platform version', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  tearDown(() {
+    GromoreLogger.setHandler(null);
+  });
 
-    // Verify that platform version is retrieved.
-    expect(
-      find.byWidgetPredicate(
-        (Widget widget) => widget is Text &&
-                           widget.data!.startsWith('Running on:'),
-      ),
-      findsOneWidget,
-    );
+  testWidgets('example starts on the settings page', (tester) async {
+    await tester.pumpWidget(const GromoreExampleApp());
+
+    expect(find.text('GroMore Flutter Example'), findsOneWidget);
+    expect(find.byType(Tab), findsNWidgets(9));
+    expect(find.byType(SettingsPage).hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('reward video requires SDK initialization before showing',
+      (tester) async {
+    await tester.pumpWidget(const GromoreExampleApp());
+
+    await tester.tap(find.text('激励'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('激励视频').hitTestable(), findsOneWidget);
+    await tester.tap(find.text('展示').hitTestable());
+    await tester.pump();
+
+    expect(find.text('请先初始化 SDK'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

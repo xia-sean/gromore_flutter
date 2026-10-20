@@ -185,10 +185,14 @@ internal class GromoreAdManager(
     val width = readInt(requestMap, "width", activity.resources.displayMetrics.widthPixels)
     val height = readInt(requestMap, "height", activity.resources.displayMetrics.heightPixels)
     val timeout = readInt(requestMap, "splashTimeout", 3500)
+    if (GromoreAdRequestOptions(requestMap).string("logo") != null) {
+      emitLog("warn", "splash logo is not supported; the logo parameter is ignored", "ad")
+    }
 
     val adSlot = AdSlot.Builder()
       .setCodeId(placementId)
       .setImageAcceptedSize(width, height)
+      .setMediationAdSlot(GromoreAdRequestOptions(requestMap).mediationSlot())
       .build()
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
@@ -303,11 +307,7 @@ internal class GromoreAdManager(
     placementId: String,
     requestMap: Map<*, *>
   ) {
-    val orientation = readInt(requestMap, "orientation", TTAdConstant.VERTICAL)
-    val adSlot = AdSlot.Builder()
-      .setCodeId(placementId)
-      .setOrientation(orientation)
-      .build()
+    val adSlot = GromoreAdRequestOptions(requestMap).rewardSlot(placementId)
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
     val holder = RewardAdHolder(adId, placementId)
@@ -418,6 +418,7 @@ internal class GromoreAdManager(
     val adSlot = AdSlot.Builder()
       .setCodeId(placementId)
       .setOrientation(orientation)
+      .setMediationAdSlot(GromoreAdRequestOptions(requestMap).mediationSlot())
       .build()
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
@@ -504,6 +505,7 @@ internal class GromoreAdManager(
     val adSlot = AdSlot.Builder()
       .setCodeId(placementId)
       .setImageAcceptedSize(width, height)
+      .setMediationAdSlot(GromoreAdRequestOptions(requestMap).mediationSlot())
       .build()
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
@@ -609,6 +611,7 @@ internal class GromoreAdManager(
       .setCodeId(placementId)
       .setImageAcceptedSize(width, height)
       .setAdCount(adCount)
+      .setMediationAdSlot(GromoreAdRequestOptions(requestMap).mediationSlot())
       .build()
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
@@ -688,6 +691,7 @@ internal class GromoreAdManager(
       .setCodeId(placementId)
       .setImageAcceptedSize(width, height)
       .setAdCount(adCount)
+      .setMediationAdSlot(GromoreAdRequestOptions(requestMap).mediationSlot())
       .build()
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
@@ -1292,15 +1296,7 @@ internal class GromoreAdManager(
 
   /** 读取请求参数中的整数值 */
   private fun readInt(source: Map<*, *>, key: String, fallback: Int): Int {
-    val extra = source["extra"] as? Map<*, *> ?: emptyMap<Any, Any>()
-    val androidOptions = source["androidOptions"] as? Map<*, *> ?: emptyMap<Any, Any>()
-    val raw = source[key] ?: androidOptions[key] ?: extra[key]
-    return when (raw) {
-      is Int -> raw
-      is Number -> raw.toInt()
-      is String -> raw.toIntOrNull() ?: fallback
-      else -> fallback
-    }
+    return GromoreAdRequestOptions(source).int(key, fallback)
   }
 
   /** 发送广告事件（切到主线程） */

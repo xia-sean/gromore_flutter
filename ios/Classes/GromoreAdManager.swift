@@ -152,7 +152,11 @@ final class GromoreAdManager: NSObject {
   private func loadSplashAd(adId: String, placementId: String, request: [String: Any]) {
     let slot = BUAdSlot()
     slot.id = placementId
-    let size = resolveSplashAdSize()
+    let options = GromoreAdRequestOptions(request: request)
+    let size = normalizedSplashAdSize(options.splashSize(fallback: resolveSplashAdSize()))
+    if options.string("logo") != nil {
+      emitLog("warn", "splash logo is not supported; the logo parameter is ignored", "ad")
+    }
 
     emitLog(
       "info",
@@ -161,6 +165,7 @@ final class GromoreAdManager: NSObject {
     )
 
     let splashAd = BUSplashAd(slot: slot, adSize: size)
+    options.configureSplashAd(splashAd)
     let delegate = SplashDelegate(manager: self, adId: adId, placementId: placementId)
     splashAd.delegate = delegate
     splashAd.cardDelegate = delegate
@@ -182,10 +187,7 @@ final class GromoreAdManager: NSObject {
     if let scenarioId = readString(request: request, key: "scenarioId") {
       slot.mediation.scenarioID = scenarioId
     }
-    let model = BURewardedVideoModel()
-    model.userId = readString(request: request, key: "userId") ?? ""
-    model.rewardName = readString(request: request, key: "rewardName") ?? ""
-    model.rewardAmount = readInt(request: request, key: "rewardAmount", fallback: 0)
+    let model = GromoreAdRequestOptions(request: request).rewardModel()
 
     let rewardedAd = BUNativeExpressRewardedVideoAd(slot: slot, rewardedVideoModel: model)
     let delegate = RewardDelegate(manager: self, adId: adId, placementId: placementId)
@@ -954,35 +956,16 @@ final class GromoreAdManager: NSObject {
     return root
   }
 
-  private func readValue(request: [String: Any], key: String) -> Any? {
-    let extra = request["extra"] as? [String: Any] ?? [:]
-    let iosOptions = request["iosOptions"] as? [String: Any] ?? [:]
-    return request[key] ?? iosOptions[key] ?? extra[key]
-  }
-
   private func readInt(request: [String: Any], key: String, fallback: Int) -> Int {
-    let value = readValue(request: request, key: key)
-    if let number = value as? NSNumber { return number.intValue }
-    if let str = value as? String { return Int(str) ?? fallback }
-    return fallback
+    return GromoreAdRequestOptions(request: request).int(key, fallback: fallback)
   }
 
   private func readString(request: [String: Any], key: String) -> String? {
-    let value = readValue(request: request, key: key)
-    if let str = value as? String { return str }
-    return nil
+    return GromoreAdRequestOptions(request: request).string(key)
   }
 
   private func readBool(request: [String: Any], key: String) -> Bool? {
-    let value = readValue(request: request, key: key)
-    if let boolVal = value as? Bool { return boolVal }
-    if let number = value as? NSNumber { return number.boolValue }
-    if let str = value as? String {
-      let normalized = str.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-      if normalized == "true" || normalized == "1" { return true }
-      if normalized == "false" || normalized == "0" { return false }
-    }
-    return nil
+    return GromoreAdRequestOptions(request: request).bool(key)
   }
 
   // MARK: - 广告实例模型

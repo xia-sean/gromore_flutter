@@ -45,4 +45,76 @@ void main() {
     );
     expect(adId, 'mock-ad-id');
   });
+
+  test('loadAd sends reward verification fields through MethodChannel',
+      () async {
+    MethodCall? captured;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      captured = call;
+      return 'mock-ad-id';
+    });
+
+    await platform.loadAd(
+      GromoreAdType.rewardVideo,
+      const GromoreRewardConfig(
+        placementId: 'reward-placement',
+        userId: 'test_user',
+        customData: '{"orderId":"order-123"}',
+      ).toRequest(),
+    );
+
+    expect(captured!.method, 'loadAd');
+    final arguments = captured!.arguments as Map;
+    expect(arguments['adType'], GromoreAdType.rewardVideo.value);
+    final request = arguments['request'] as Map;
+    expect(request['userId'], 'test_user');
+    expect(request['customData'], '{"orderId":"order-123"}');
+  });
+
+  test('invokeNative sends preview options inside args', () async {
+    MethodCall? captured;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      captured = call;
+      return true;
+    });
+
+    await platform.invokeNative('openTestTool', {
+      'rit': 'reward-placement',
+      'info': {'test': 'value'},
+    });
+
+    expect(captured!.method, 'invokeNative');
+    expect(captured!.arguments, {
+      'method': 'openTestTool',
+      'args': {
+        'rit': 'reward-placement',
+        'info': {'test': 'value'},
+      },
+    });
+  });
+
+  test('platform extras reach native using only the new channel keys',
+      () async {
+    MethodCall? captured;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      captured = call;
+      return 'mock-ad-id';
+    });
+
+    await platform.loadAd(
+      GromoreAdType.rewardVideo,
+      const GromoreRewardConfig(
+        placementId: 'reward-placement',
+        androidExtra: {'customData': 'android-data'},
+        iosExtra: {'customData': 'ios-data'},
+      ).toRequest(),
+    );
+
+    final request = (captured!.arguments as Map)['request'] as Map;
+    expect(request['androidExtra'], {'customData': 'android-data'});
+    expect(request['iosExtra'], {'customData': 'ios-data'});
+  });
 }

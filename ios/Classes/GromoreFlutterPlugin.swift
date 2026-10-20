@@ -282,8 +282,8 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
   ///   - call: 方法调用信息
   ///   - result: 回调结果
   private func handleInvokeNative(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
-    let args = call.arguments as? [String: Any]
-    let method = args?["method"] as? String ?? "unknown"
+    let payload = call.arguments as? [String: Any] ?? [:]
+    let method = payload["method"] as? String ?? "unknown"
     switch method {
     case "getSdkVersion":
       result(BUAdSDKManager.sdkVersion)
@@ -304,10 +304,7 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
     // 打开 GroMore 预览工具（仅 Debug）
     case "openTestTool":
 #if DEBUG
-      var info = args?["info"] as? [String: Any] ?? [:]
-      if let rit = args?["rit"] as? String, !rit.isEmpty {
-        info["rit"] = rit
-      }
+      let info = Self.previewInfo(from: payload)
       BUAdSDKTestToolManager.configStylePreviewInfo(info) { success, error, _ in
         if success {
           result(true)
@@ -322,6 +319,15 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
       emitLog(level: "warn", message: "invokeNative not implemented: \(method)", tag: "native")
       result(FlutterError(code: "not_implemented", message: "invokeNative is not implemented: \(method)", details: nil))
     }
+  }
+
+  static func previewInfo(from payload: [String: Any]) -> [String: Any] {
+    let args = payload["args"] as? [String: Any] ?? payload
+    var info = args["info"] as? [String: Any] ?? [:]
+    if let rit = args["rit"] as? String, !rit.isEmpty {
+      info["rit"] = rit
+    }
+    return info
   }
 
   /// 发送广告事件到 Flutter

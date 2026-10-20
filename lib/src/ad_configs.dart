@@ -1,37 +1,40 @@
 import 'ad_request.dart';
 
-/// 广告配置基类
+/// 广告配置，优先使用各广告类型提供的字段。
 abstract class GromoreAdConfig {
   const GromoreAdConfig({
     required this.placementId,
     this.extra,
-    this.androidOptions,
-    this.iosOptions,
+    this.androidExtra,
+    this.iosExtra,
   });
 
-  /// 代码位/PlacementId
+  /// 广告位 ID。
   final String placementId;
 
-  /// 通用扩展参数
+  /// 两端共用的广告参数，只支持插件已定义的键，不会整体发给服务器。
+  /// 激励回调要传订单号等业务数据，请使用 [GromoreRewardConfig.customData]。
   final Map<String, dynamic>? extra;
 
-  /// Android 平台扩展参数
-  final Map<String, dynamic>? androidOptions;
+  /// 只给 Android 使用的广告参数，例如 {'muted': true}。
+  /// 与普通字段或 [extra] 重名时，不覆盖它们。
+  final Map<String, dynamic>? androidExtra;
 
-  /// iOS 平台扩展参数
-  final Map<String, dynamic>? iosOptions;
+  /// 只给 iOS 使用的广告参数，例如 {'muted': true}。
+  /// 与普通字段或 [extra] 重名时，不覆盖它们。
+  final Map<String, dynamic>? iosExtra;
 
-  /// 构建顶层请求参数
+  /// 构建广告参数。
   Map<String, dynamic> buildParams();
 
-  /// 转为统一请求
+  /// 转为广告请求。
   GromoreAdRequest toRequest() {
     return GromoreAdRequest(
       placementId: placementId,
       params: buildParams(),
       extra: extra,
-      androidOptions: androidOptions,
-      iosOptions: iosOptions,
+      androidExtra: androidExtra,
+      iosExtra: iosExtra,
     );
   }
 }
@@ -45,13 +48,13 @@ class GromoreSplashConfig extends GromoreAdConfig {
     this.timeoutMillis,
     this.logo,
     Map<String, dynamic>? extra,
-    Map<String, dynamic>? androidOptions,
-    Map<String, dynamic>? iosOptions,
+    Map<String, dynamic>? androidExtra,
+    Map<String, dynamic>? iosExtra,
   }) : super(
           placementId: placementId,
           extra: extra,
-          androidOptions: androidOptions,
-          iosOptions: iosOptions,
+          androidExtra: androidExtra,
+          iosExtra: iosExtra,
         );
 
   /// 广告宽度
@@ -63,7 +66,7 @@ class GromoreSplashConfig extends GromoreAdConfig {
   /// 加载超时时间（毫秒）
   final int? timeoutMillis;
 
-  /// 底部 logo（仅部分平台可用）
+  /// 预留字段，当前 Android/iOS 均未实现；传入时原生端会输出警告。
   final String? logo;
 
   @override
@@ -89,34 +92,36 @@ class GromoreRewardConfig extends GromoreAdConfig {
     this.rewardAmount,
     this.customData,
     Map<String, dynamic>? extra,
-    Map<String, dynamic>? androidOptions,
-    Map<String, dynamic>? iosOptions,
+    Map<String, dynamic>? androidExtra,
+    Map<String, dynamic>? iosExtra,
   }) : super(
           placementId: placementId,
           extra: extra,
-          androidOptions: androidOptions,
-          iosOptions: iosOptions,
+          androidExtra: androidExtra,
+          iosExtra: iosExtra,
         );
 
   /// 播放方向（竖屏=1，横屏=2，仅 Android）
   final int? orientation;
 
-  /// 是否静音（iOS 可用）
+  /// 是否静音，实际效果取决于广告来源 SDK 是否支持。
   final bool? muted;
 
-  /// 场景 ID（iOS 可用）
+  /// GroMore 场景 ID。
   final String? scenarioId;
 
-  /// 用户 ID（iOS 可用）
+  /// 服务端激励回调中的用户 ID（Android/iOS）。
   final String? userId;
 
-  /// 奖励名称（iOS 可用）
+  /// 奖励名称（Android/iOS），实际奖励以平台配置和回调为准。
   final String? rewardName;
 
-  /// 奖励数量（iOS 可用）
+  /// 奖励数量（Android/iOS），实际奖励以平台配置和回调为准。
   final int? rewardAmount;
 
-  /// 服务端验证自定义数据
+  /// 要让服务器收到的业务数据，回调字段名为 extra。
+  /// 例如 customData: '{"orderId":"123"}'；Map 请先用 jsonEncode 转成字符串。
+  /// 与上面的 [extra] 广告参数 Map 不同。
   final String? customData;
 
   @override
@@ -140,19 +145,19 @@ class GromoreInterstitialConfig extends GromoreAdConfig {
     this.orientation,
     this.muted,
     Map<String, dynamic>? extra,
-    Map<String, dynamic>? androidOptions,
-    Map<String, dynamic>? iosOptions,
+    Map<String, dynamic>? androidExtra,
+    Map<String, dynamic>? iosExtra,
   }) : super(
           placementId: placementId,
           extra: extra,
-          androidOptions: androidOptions,
-          iosOptions: iosOptions,
+          androidExtra: androidExtra,
+          iosExtra: iosExtra,
         );
 
   /// 播放方向（竖屏=1，横屏=2，仅 Android）
   final int? orientation;
 
-  /// 是否静音（iOS 可用）
+  /// 是否静音，实际效果取决于广告来源 SDK 是否支持。
   final bool? muted;
 
   @override
@@ -171,19 +176,19 @@ class GromoreFullscreenVideoConfig extends GromoreAdConfig {
     this.orientation,
     this.muted,
     Map<String, dynamic>? extra,
-    Map<String, dynamic>? androidOptions,
-    Map<String, dynamic>? iosOptions,
+    Map<String, dynamic>? androidExtra,
+    Map<String, dynamic>? iosExtra,
   }) : super(
           placementId: placementId,
           extra: extra,
-          androidOptions: androidOptions,
-          iosOptions: iosOptions,
+          androidExtra: androidExtra,
+          iosExtra: iosExtra,
         );
 
   /// 播放方向（竖屏=1，横屏=2，仅 Android）
   final int? orientation;
 
-  /// 是否静音（iOS 可用）
+  /// 是否静音，实际效果取决于广告来源 SDK 是否支持。
   final bool? muted;
 
   @override
@@ -203,13 +208,13 @@ class GromoreBannerConfig extends GromoreAdConfig {
     this.height,
     this.muted,
     Map<String, dynamic>? extra,
-    Map<String, dynamic>? androidOptions,
-    Map<String, dynamic>? iosOptions,
+    Map<String, dynamic>? androidExtra,
+    Map<String, dynamic>? iosExtra,
   }) : super(
           placementId: placementId,
           extra: extra,
-          androidOptions: androidOptions,
-          iosOptions: iosOptions,
+          androidExtra: androidExtra,
+          iosExtra: iosExtra,
         );
 
   /// 广告宽度
@@ -218,7 +223,7 @@ class GromoreBannerConfig extends GromoreAdConfig {
   /// 广告高度
   final int? height;
 
-  /// 是否静音（iOS 可用）
+  /// 是否静音，实际效果取决于广告来源 SDK 是否支持。
   final bool? muted;
 
   @override
@@ -240,13 +245,13 @@ class GromoreFeedConfig extends GromoreAdConfig {
     this.adCount,
     this.muted,
     Map<String, dynamic>? extra,
-    Map<String, dynamic>? androidOptions,
-    Map<String, dynamic>? iosOptions,
+    Map<String, dynamic>? androidExtra,
+    Map<String, dynamic>? iosExtra,
   }) : super(
           placementId: placementId,
           extra: extra,
-          androidOptions: androidOptions,
-          iosOptions: iosOptions,
+          androidExtra: androidExtra,
+          iosExtra: iosExtra,
         );
 
   /// 广告宽度
@@ -258,7 +263,7 @@ class GromoreFeedConfig extends GromoreAdConfig {
   /// 请求数量
   final int? adCount;
 
-  /// 是否静音（iOS 可用）
+  /// 是否静音，实际效果取决于广告来源 SDK 是否支持。
   final bool? muted;
 
   @override
@@ -281,13 +286,13 @@ class GromoreDrawConfig extends GromoreAdConfig {
     this.adCount,
     this.muted,
     Map<String, dynamic>? extra,
-    Map<String, dynamic>? androidOptions,
-    Map<String, dynamic>? iosOptions,
+    Map<String, dynamic>? androidExtra,
+    Map<String, dynamic>? iosExtra,
   }) : super(
           placementId: placementId,
           extra: extra,
-          androidOptions: androidOptions,
-          iosOptions: iosOptions,
+          androidExtra: androidExtra,
+          iosExtra: iosExtra,
         );
 
   /// 广告宽度
@@ -299,7 +304,7 @@ class GromoreDrawConfig extends GromoreAdConfig {
   /// 请求数量
   final int? adCount;
 
-  /// 是否静音（iOS 可用）
+  /// 是否静音，实际效果取决于广告来源 SDK 是否支持。
   final bool? muted;
 
   @override

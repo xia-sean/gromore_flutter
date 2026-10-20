@@ -907,7 +907,9 @@ class _AdPageState extends State<AdPage> {
     try {
       final Map<String, dynamic> extra = {};
       if (widget.showSize) {
-        final double ratio = MediaQuery.of(context).devicePixelRatio;
+        final double ratio = defaultTargetPlatform == TargetPlatform.android
+            ? MediaQuery.of(context).devicePixelRatio
+            : 1;
         final double width =
             double.tryParse(widget.config.widthController.text) ?? 0;
         final double height =
@@ -919,6 +921,7 @@ class _AdPageState extends State<AdPage> {
         extra['userId'] = 'test_user';
         extra['rewardName'] = '金币';
         extra['rewardAmount'] = 1;
+        extra['customData'] = '{"source":"flutter_example"}';
       }
       final request = GromoreAdRequest(
         placementId: placementId,

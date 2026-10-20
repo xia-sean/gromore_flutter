@@ -1,92 +1,96 @@
-<div align="center">
+# Flutter GroMore Ads
 
-【♻️ 持续更新】一款优质的 GroMore 聚合 Flutter 广告插件，支持多广告类型、事件回调与多 ADN 配置。
-
-![pub](https://img.shields.io/badge/pub-v2.2.0-blue)
+[![中文指引](https://img.shields.io/badge/%E4%B8%AD%E6%96%87%E6%8C%87%E5%BC%95-1677FF)](doc/README.zh-CN.md)
+![pub](https://img.shields.io/pub/v/gromore_flutter.svg)
 ![platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS-4CAF50)
 ![license](https://img.shields.io/badge/license-Source--Available-9C27B0)
 ![github](https://img.shields.io/badge/github-xia--sean%2Fgromore__flutter-black)
 
-# 📱 Flutter GroMore Ads
+An actively maintained GroMore ad mediation plugin for Flutter, with Android
+and iOS support, multiple ad formats, event callbacks, and multiple ad network
+(ADN) configurations.
 
-<hr>
+> This is a source-available project. Forks are permitted only for evaluation,
+> testing, fixing issues, and contributing changes back through pull requests.
+> Republishing this project or a modified version as an independent plugin,
+> SDK, package, or competing product is not permitted. See [LICENSE](LICENSE),
+> the [Chinese explanation](LICENSE.zh-CN.md), and
+> [contribution guidelines](CONTRIBUTING.md).
 
-<img src="doc/images/wechat_qr.png" width="120" alt="微信二维码" />
+## Features
 
-邮箱📬 [xm_sean@163.com](mailto:xm_sean@163.com)
+- Splash ads.
+- Interstitial ads.
+- Fullscreen video ads.
+- Banner ads.
+- Rewarded video ads.
+- Native feed ads, including template/Express ads and built-in default styles
+  for self-rendered ads.
+- Draw feed ads.
 
-</div>
-
-> 中文：本仓库为源码可见项目。允许 fork 仅用于评估、测试、修复问题并通过 Pull Request 回馈主仓库；不允许将本项目或修改版本重新发布为独立插件、SDK、package 或竞品。详见 [LICENSE](LICENSE)、[LICENSE.zh-CN.md](LICENSE.zh-CN.md) 与 [CONTRIBUTING.md](CONTRIBUTING.md)。
-
-## 🚀 核心功能
-
-- ✅ 开屏广告
-- ✅ 插屏广告
-- ✅ 全屏视频
-- ✅ Banner
-- ✅ 激励视频
-- ✅ 信息流（模板/Express + 内置默认自渲染样式）
-- ✅ Draw 信息流
-
-## 📡 示例截图
+## Screenshots
 
 <div align="center">
-  <img src="doc/images/1.jpg" width="19%" alt="示例设置页" />
-  <img src="doc/images/2.jpg" width="19%" alt="插屏广告示例" />
-  <img src="doc/images/3.jpg" width="19%" alt="Draw 信息流示例" />
-  <img src="doc/images/4.jpg" width="19%" alt="Banner 示例" />
-  <img src="doc/images/5.jpg" width="19%" alt="日志页示例" />
+  <img src="doc/images/1.jpg" width="19%" alt="Settings" />
+  <img src="doc/images/2.jpg" width="19%" alt="Interstitial ad" />
+  <img src="doc/images/3.jpg" width="19%" alt="Draw feed ad" />
+  <img src="doc/images/4.jpg" width="19%" alt="Banner ad" />
+  <img src="doc/images/5.jpg" width="19%" alt="Logs" />
 </div>
 
-## 📱 系统要求
+## Requirements
 
-- Android：`minSdk 24`
-- iOS：`13.0+`
+- Android: minimum SDK 24.
+- iOS: 13.0 or later.
 
-## ⚡ 5 分钟接入
+## Quick Start
 
-当前插件版本：`2.2.0`；内置 Android GroMore `7.8.1.4`、iOS Ads-CN-Beta `7.8.0.5`。
+Current plugin version: `2.2.2`. Bundled SDKs: Android GroMore `7.8.1.4`
+and iOS Ads-CN-Beta `7.8.0.5`.
 
-### 1. 添加依赖
+### 1. Add the dependency
 
 ```yaml
 dependencies:
-  gromore_flutter: ^2.2.1
+  gromore_flutter: ^2.2.2
 ```
 
-执行：
+Run:
 
 ```bash
 flutter pub get
 ```
 
-### 2. 初始化
+### 2. Initialize the SDK
 
-普通单进程应用只需要传入当前平台的 AppId：
+For a standard single-process app, provide the App ID for the current platform:
 
 ```dart
 import 'package:flutter/foundation.dart';
 import 'package:gromore_flutter/gromore_flutter.dart';
 
 final result = await GromoreFlutter.instance.initialize(
-  androidAppId: 'your_android_app_id', // Android 使用
-  iosAppId: 'your_ios_app_id' // iOS 使用
+  androidAppId: 'your_android_app_id', // For Android
+  iosAppId: 'your_ios_app_id' // For iOS
 );
 ```
 
-初始化返回 `InitResult`；需要展示错误时再读取 `result.android` 或 `result.ios`。
+Initialization returns an `InitResult`. Read `result.android` or `result.ios`
+when you need to display initialization errors.
 
-这些配置都有默认值，普通接入不需要重复填写：
+The following settings have defaults and do not need to be supplied for a
+standard integration:
 
-- `androidAppName`：Android 会自动读取应用名称。
-- `iosAppName`：保留用于兼容旧配置，当前 iOS SDK 初始化不依赖它。
-- `debug`：默认关闭。
-- `useMediation`：默认开启。
-- `enabledAdTypes`：默认启用全部广告类型。
-- `enableLog`：Debug 默认开启，Release 默认关闭。
+- `androidAppName`: Android reads the application name automatically.
+- `iosAppName`: retained for compatibility with older configurations; the
+  current iOS SDK does not depend on it during initialization.
+- `debug`: disabled by default.
+- `useMediation`: enabled by default.
+- `enabledAdTypes`: all ad formats are enabled by default.
+- `enableLog`: enabled in Debug builds and disabled in Release builds by default.
 
-如果需要在用户同意隐私协议前限制 SDK 采集，可以额外传入：
+To disable optional data collection before the user grants privacy consent,
+pass the privacy configuration explicitly:
 
 ```dart
 await GromoreFlutter.instance.initialize(
@@ -96,24 +100,26 @@ await GromoreFlutter.instance.initialize(
 );
 ```
 
-### 高级初始化（可选）
+### Advanced initialization (optional)
 
-`initialize(...)` 是普通接入的快捷入口，只处理 AppId 和隐私配置。需要限制广告类型、显式控制日志，或传入平台专属参数时，使用 `init(GromoreConfig(...))`：
+`initialize(...)` is a shortcut for standard integrations and handles only
+App IDs and privacy configuration. To restrict ad formats, explicitly control
+logging, or provide platform-specific options, use `init(GromoreConfig(...))`:
 
 ```dart
 final result = await GromoreFlutter.instance.init(
   const GromoreConfig(
     androidAppId: 'your_android_app_id',
     iosAppId: 'your_ios_app_id',
-    // 只启用业务实际使用的广告类型；不传则默认全部启用。
+    // Enable only the ad formats your app uses; all are enabled if omitted.
     enabledAdTypes: {
       GromoreAdType.splash,
       GromoreAdType.rewardVideo,
     },
-    // 不传时 Debug 默认开启、Release 默认关闭。
+    // If omitted, logging is enabled in Debug and disabled in Release.
     enableLog: kDebugMode,
     enableLogToFile: false,
-    // 以下参数只在对应平台需要时填写，不需要时删除即可。
+    // Include the following options only when the corresponding platform needs them.
     androidOptions: {
       'supportMultiProcess': true,
     },
@@ -126,19 +132,26 @@ final result = await GromoreFlutter.instance.init(
 );
 ```
 
-常用字段说明：
+Common configuration fields:
 
-- `enabledAdTypes`：限制可加载的广告类型；默认启用全部类型。
-- `enableLog`：控制控制台日志；`enableLogToFile`：额外开启文件日志。
-- `debug`：控制原生 SDK Debug 模式，和 `enableLog` 是两个独立开关。
-- `useMediation`：是否启用 GroMore 聚合，默认开启。
-- `androidOptions`、`iosOptions`：仅用于平台专属能力；普通接入不要为了“完整”而填写。
+- `enabledAdTypes`: restricts the ad formats that can be loaded; all formats
+  are enabled by default.
+- `enableLog`: controls console logging. `enableLogToFile` additionally enables
+  file logging.
+- `debug`: controls the native SDK's Debug mode and is independent of `enableLog`.
+- `useMediation`: enables GroMore mediation and defaults to `true`.
+- `androidOptions` and `iosOptions`: configure platform-specific capabilities.
+  Do not add them to a standard integration just to make the configuration
+  appear complete.
 
-隐私、多进程和原生初始化见：[Android 配置](doc/android.md)、[iOS 配置](doc/ios.md)、[隐私配置](doc/privacy.md)。
+For privacy controls, multi-process support, and native initialization, see
+[Android setup](doc/android.md), [iOS setup](doc/ios.md), and
+[privacy configuration](doc/privacy.md).
 
-### 3. 加载并展示广告
+### 3. Load and show an ad
 
-下面以开屏广告为例，所有广告类型的完整示例见：[所有广告加载示例](doc/ad_examples.md)。
+This example uses a splash ad. For complete examples of every ad format, see
+[ad examples](doc/ad_examples.md).
 
 ```dart
 final adId = await GromoreSplash.load(
@@ -161,24 +174,28 @@ final subscription = GromoreSplash.listen(
 
 await GromoreSplash.show(adId);
 
-// 页面销毁时取消订阅并释放广告。
+// Cancel the subscription and dispose of the ad when the page is disposed.
 await subscription.cancel();
 await GromoreSplash.dispose(adId);
 ```
 
-## 📋 广告类型
+See [ad examples](doc/ad_examples.md) for all formats and rewarded video
+server verification using `userId` and `customData`.
 
-| 广告 | Facade | 是否需要视图组件 |
+## Ad Formats
+
+| Format | API | Embedded view |
 | --- | --- | --- |
-| [开屏](doc/ad_examples.md#-开屏广告) | `GromoreSplash` | 否 |
-| [插屏](doc/ad_examples.md#-插屏广告) | `GromoreInterstitial` | 否 |
-| [全屏视频](doc/ad_examples.md#-全屏视频) | `GromoreFullscreenVideo` | 否 |
-| [激励视频](doc/ad_examples.md#-激励视频) | `GromoreReward` | 否 |
-| [Banner](doc/ad_examples.md#-banner) | `GromoreBanner` | 是 |
-| [信息流](doc/ad_examples.md#-信息流) | `GromoreFeed` | 是 |
-| [Draw 信息流](doc/ad_examples.md#-draw-信息流) | `GromoreDraw` | 是 |
+| [Splash](doc/ad_examples.md#-开屏广告) | `GromoreSplash` | No |
+| [Interstitial](doc/ad_examples.md#-插屏广告) | `GromoreInterstitial` | No |
+| [Fullscreen video](doc/ad_examples.md#-全屏视频) | `GromoreFullscreenVideo` | No |
+| [Rewarded video](doc/ad_examples.md#-激励视频) | `GromoreReward` | No |
+| [Banner](doc/ad_examples.md#-banner) | `GromoreBanner` | Yes |
+| [Native feed](doc/ad_examples.md#-信息流) | `GromoreFeed` | Yes |
+| [Draw feed](doc/ad_examples.md#-draw-信息流) | `GromoreDraw` | Yes |
 
-视频和开屏广告的调用模式都是 `load → listen → show`。Banner、信息流和 Draw 在加载后把 `adId` 放入对应视图：
+Video and splash ads follow the `load -> listen -> show` pattern. For banner,
+native feed, and Draw feed ads, pass the loaded `adId` to the corresponding view:
 
 ```dart
 GromoreBannerView(
@@ -188,27 +205,31 @@ GromoreBannerView(
 )
 ```
 
-完整广告 API、事件、渲染尺寸、可见性检测和资源释放见：[所有广告加载示例](doc/ad_examples.md)。
+For the complete ad API, callbacks, rendered dimensions, visibility detection,
+and resource cleanup, see [ad examples](doc/ad_examples.md).
 
-## ⚙️ 平台配置
+## Platform Setup
 
-插件已经自动合并 Android 的基础网络权限和 `TTFileProvider`。普通接入不需要重复添加这些配置。
+Basic Android network permissions and `TTFileProvider` are merged by the plugin.
+You do not need to add them again for a standard integration.
 
-只有以下场景才需要额外平台配置：
+Additional platform configuration is needed only in the following scenarios:
 
-- Android 多进程或需要隐私同意后由宿主控制初始化。
-- iOS 调用 ATT、接入额外 ADN 或使用特定系统能力。
-- Android/iOS 接入广点通、百度、快手、AdMob 等第三方 ADN。
+- Android multi-process apps, or apps where the host controls initialization
+  after privacy consent.
+- iOS apps using ATT, additional ad networks, or specific system capabilities.
+- Android/iOS integrations with third-party ad networks such as Tencent GDT,
+  Baidu, Kuaishou, or AdMob.
 
-请按实际场景查看：
+Refer to the guides relevant to your integration:
 
-- [Android配置、多进程初始化与ADN配置](doc/android.md)
-- [iOS配置、ATT与ADN配置](doc/ios.md)
-- [隐私与信息采集合规](doc/privacy.md)
+- [Android setup, multi-process initialization, and ad networks](doc/android.md)
+- [iOS setup, ATT, and ad networks](doc/ios.md)
+- [Privacy and data collection](doc/privacy.md)
 
-## 📣 事件
+## Events
 
-推荐使用 `GromoreAdCallback`：
+Use `GromoreAdCallback` to handle ad events:
 
 ```dart
 GromoreAdCallback(
@@ -224,49 +245,68 @@ GromoreAdCallback(
 )
 ```
 
-常用事件：
+Common events:
 
-- `onLoaded`：广告加载成功。
-- `onRendered`：模板/信息流渲染完成。
-- `onShown`：广告展示。
-- `onClosed`：广告关闭，包括信息流关闭操作。
-- `onRewarded`：激励到账。
-- `onFailed`：加载或展示失败。
+- `onLoaded`: the ad loaded successfully.
+- `onRendered`: a template or native feed ad finished rendering.
+- `onShown`: the ad was displayed.
+- `onClosed`: the ad was closed, including when a native feed ad is closed.
+- `onRewarded`: the reward was granted.
+- `onFailed`: loading or displaying the ad failed.
 
-## ❓ 常见问题
+## Frequently Asked Questions
 
-### Android 是否必须配置 Manifest？
+### Is Android Manifest configuration required?
 
-普通单进程应用不需要。直接在 `GromoreConfig` 传 `androidAppId` 即可。Manifest 配置只用于多进程、自动初始化或宿主原生控制初始化。
+Not for a standard single-process app. Pass `androidAppId` in `GromoreConfig`.
+Manifest configuration is needed only for multi-process support, automatic
+initialization, or initialization controlled by the native host.
 
-### iOS 是否必须调用 ATT？
+### Is ATT required on iOS?
 
-不是。只有业务需要 IDFA 或个性化广告授权时才调用 `requestATT()`，并在 `Info.plist` 配置 `NSUserTrackingUsageDescription`。
+No. Call `requestATT()` only when your app needs IDFA or personalized advertising
+authorization, and configure `NSUserTrackingUsageDescription` in `Info.plist`.
 
-### 是否必须填写 `privacy`？
+### Is the `privacy` configuration required?
 
-不是。只有需要在隐私协议同意前限制采集时才使用 `GromorePrivacyConfig`。
+No. Use `GromorePrivacyConfig` only when you need to restrict data collection
+before the user accepts your privacy policy.
 
-### 是否必须配置所有广告类型？
+### Do I need to configure every ad format?
 
-不是。`enabledAdTypes` 默认启用全部类型；需要限制类型时再自行传入集合。
+No. All ad formats are enabled by default through `enabledAdTypes`. Provide a
+restricted set only when you need to limit the available formats.
 
-### 接入第三方 ADN 怎么办？
+### How do I integrate a third-party ad network?
 
-先确认对应平台的 SDK、Adapter、AppId、权限和 `Info.plist`/Manifest 要求，再查看 [iOS 配置](doc/ios.md) 或 [Android 配置](doc/android.md)。
+First check the platform-specific SDK, adapter, App ID, permission, and
+`Info.plist`/Manifest requirements. Then follow [iOS setup](doc/ios.md) or
+[Android setup](doc/android.md).
 
-更多问题见：[排错指南](doc/troubleshooting.md)。
+For more help, see [troubleshooting](doc/troubleshooting.md).
 
-## 📚 高级文档
+## Documentation
 
-- [Android配置、多进程初始化ADN与配置](doc/android.md)
-- [Android 宿主接入模板](doc/android_host_integration_template.md)
-- [iOS配置、ATT与多ADN配置](doc/ios.md)
-- [隐私配置](doc/privacy.md)
-- [所有广告加载示例](doc/ad_examples.md)
-- [日志与 Debug 工具](doc/logging.md)
-- [排错指南](doc/troubleshooting.md)
+The detailed guides below are in Chinese:
 
-## 📄 许可与联系
+- [Full Chinese setup guide](doc/README.zh-CN.md)
+- [Android setup and ad networks](doc/android.md)
+- [Android native initialization](doc/android_host_integration_template.md)
+- [iOS setup, ATT, and ad networks](doc/ios.md)
+- [Privacy configuration](doc/privacy.md)
+- [Ad examples and callbacks](doc/ad_examples.md)
+- [Logging and debug tools](doc/logging.md)
+- [Troubleshooting](doc/troubleshooting.md)
 
-本项目为源码可见项目。许可说明见 [LICENSE](LICENSE)、[LICENSE.zh-CN.md](LICENSE.zh-CN.md) 和 [CONTRIBUTING.md](CONTRIBUTING.md)。
+Release history is available in the [Chinese changelog](CHANGELOG.md).
+
+## License and Contact
+
+This project uses a custom source-available license. It permits evaluation,
+testing, and contribution, with restrictions on redistribution and derivative
+products. Review [LICENSE](LICENSE), the [Chinese explanation](LICENSE.zh-CN.md),
+and [contribution guidelines](CONTRIBUTING.md) before use.
+
+Contact: [xm_sean@163.com](mailto:xm_sean@163.com).
+
+<img src="doc/images/wechat_qr.png" width="120" alt="WeChat contact QR code" />

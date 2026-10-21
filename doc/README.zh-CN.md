@@ -48,13 +48,13 @@
 
 ## ⚡ 5 分钟接入
 
-当前插件版本：`2.2.3`；内置 Android GroMore `7.8.1.4`、iOS Ads-CN-Beta `7.8.0.5`。
+当前插件版本：`2.2.4`；内置 Android GroMore `7.8.1.4`、iOS Ads-CN-Beta `7.8.0.5`。
 
 ### 1. 添加依赖
 
 ```yaml
 dependencies:
-  gromore_flutter: ^2.2.3
+  gromore_flutter: ^2.2.4
 ```
 
 执行：

@@ -7,7 +7,7 @@
 ![pub](https://img.shields.io/pub/v/gromore_flutter.svg)
 ![platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS-4CAF50)
 ![license](https://img.shields.io/badge/license-Source--Available-9C27B0)
-![github](https://img.shields.io/badge/github-xia--sean%2Fgromore__flutter-black)
+[![github](https://img.shields.io/badge/github-xia--sean%2Fgromore__flutter-black)](https://github.com/xia-sean/gromore_flutter)
 
 # 📱 Flutter GroMore Ads
 
@@ -48,13 +48,13 @@
 
 ## ⚡ 5 分钟接入
 
-当前插件版本：`2.2.4`；内置 Android GroMore `7.8.1.4`、iOS Ads-CN-Beta `7.8.0.5`。
+当前插件版本：`2.2.5`；内置 Android GroMore `7.8.1.4`、iOS Ads-CN-Beta `7.8.0.5`。
 
 ### 1. 添加依赖
 
 ```yaml
 dependencies:
-  gromore_flutter: ^2.2.4
+  gromore_flutter: ^2.2.5
 ```
 
 执行：
@@ -143,7 +143,7 @@ final result = await GromoreFlutter.instance.init(
 下面以开屏广告为例，所有广告类型的完整示例见：[所有广告加载示例](ad_examples.md)。
 
 ```dart
-final adId = await GromoreSplash.load(
+final adId = await GromoreSplash.loadReady(
   const GromoreSplashConfig(
     placementId: 'your_splash_placement_id',
     timeoutMillis: 3000,

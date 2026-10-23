@@ -48,15 +48,27 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
     logEventChannel.setStreamHandler(LogEventStreamHandler(owner: instance))
 
     let adManager = GromoreAdManager(
-      emitAdEvent: { payload in
-        instance.emitAdEvent(payload)
+      emitAdEvent: { [weak instance] payload in
+        instance?.emitAdEvent(payload)
       },
-      emitLog: { level, message, tag in
-        instance.emitLog(level: level, message: message, tag: tag)
+      emitLog: { [weak instance] level, message, tag in
+        instance?.emitLog(level: level, message: message, tag: tag)
       }
     )
     instance.adManager = adManager
     registrar.register(GromoreAdViewFactory(adManager: adManager), withId: "gromore_flutter/ad_view")
+    registrar.publish(instance)
+  }
+
+  /// 引擎解绑时释放广告及事件通道，避免退出后仍持有 SDK 对象。
+  public func detachFromEngine(for registrar: FlutterPluginRegistrar) {
+    adManager?.clearAll()
+    adManager = nil
+    methodChannel?.setMethodCallHandler(nil)
+    adEventChannel?.setStreamHandler(nil)
+    logEventChannel?.setStreamHandler(nil)
+    adEventSink = nil
+    logEventSink = nil
   }
 
   /// 方法通道回调
@@ -256,8 +268,17 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
       result(FlutterError(code: "invalid_args", message: "adId is missing.", details: nil))
       return
     }
-    adManager?.showAd(adId: adId ?? "")
-    result(nil)
+    do {
+      guard let manager = adManager else {
+        throw GromoreAdFailure(code: "not_ready", message: "Ad manager unavailable")
+      }
+      try manager.showAd(adId: adId ?? "")
+      result(nil)
+    } catch let error as GromoreAdFailure {
+      result(FlutterError(code: error.code, message: error.message, details: nil))
+    } catch {
+      result(FlutterError(code: "show_failed", message: error.localizedDescription, details: nil))
+    }
   }
 
   /// 销毁广告
@@ -284,7 +305,53 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
   private func handleInvokeNative(_ call: FlutterMethodCall, result: @escaping FlutterResult) {
     let payload = call.arguments as? [String: Any] ?? [:]
     let method = payload["method"] as? String ?? "unknown"
+    let args = payload["args"] as? [String: Any] ?? [:]
+    do {
     switch method {
+    case "getAdIds", "getAdState", "getAdDiagnostics", "controlVideo", "showSplashCard", "hideSplashSkipButton":
+      guard let manager = adManager else {
+        throw GromoreAdFailure(code: "not_ready", message: "Ad manager unavailable")
+      }
+      result(try manager.operation(method, args: args))
+    case "getSdkInfo":
+      result(["version": BUAdSDKManager.sdkVersion, "isReady": BUAdSDKManager.state == .start,
+        "isInitialized": BUAdSDKManager.state == .start])
+    case "getMediationExtraInfo":
+      result(BUAdSDKManager.mediation.getMediationExtraInfo())
+    case "preloadAds":
+      guard let requests = args["requests"] as? [[String: Any]], !requests.isEmpty,
+            let interval = args["interval"] as? Int, (1...10).contains(interval),
+            let concurrent = args["concurrent"] as? Int, (1...20).contains(concurrent) else {
+        throw GromoreAdFailure(code: "invalid_args", message: "Invalid preload options")
+      }
+      let infos = try requests.map { item -> Any in
+        guard let id = item["iosFactoryId"] as? String,
+              let factory = GromoreNativeRenderRegistry.preloadFactory(id) else {
+          throw GromoreAdFailure(code: "factory_not_found", message: "Register an iOS preload info factory and provide iosFactoryId")
+        }
+        return factory(item)
+      }
+      BUAdSDKManager.mediation.preloadAds(withInfos: infos, andInterval: interval, andConcurrent: concurrent)
+      result(nil)
+    case "updateConfig":
+      let supported: Set<String> = ["themeStatus", "userInfoForSegment"]
+      guard Set(args.keys).isSubset(of: supported) else {
+        throw GromoreAdFailure(code: "unsupported", message: "iOS runtime updates support themeStatus/userInfoForSegment; configure privacy and local extra before init")
+      }
+      if let value = args["themeStatus"] as? Int, let theme = BUAdSDKThemeStatus(rawValue: value) {
+        BUAdSDKManager.setThemeStatus(theme)
+      }
+      if let segment = buildSegmentInfo(args["userInfoForSegment"] as? [String: Any]) {
+        let current = BUAdSDKManager.mediation.userInfoForSegment()
+        current.user_id = segment.user_id
+        current.channel = segment.channel
+        current.sub_channel = segment.sub_channel
+        current.age = segment.age
+        current.gender = segment.gender
+        current.user_value_group = segment.user_value_group
+        current.customized_id = segment.customized_id
+      }
+      result(nil)
     case "getSdkVersion":
       result(BUAdSDKManager.sdkVersion)
     case "getSdkState":
@@ -318,6 +385,11 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
     default:
       emitLog(level: "warn", message: "invokeNative not implemented: \(method)", tag: "native")
       result(FlutterError(code: "not_implemented", message: "invokeNative is not implemented: \(method)", details: nil))
+    }
+    } catch let error as GromoreAdFailure {
+      result(FlutterError(code: error.code, message: error.message, details: nil))
+    } catch {
+      result(FlutterError(code: "native_error", message: error.localizedDescription, details: nil))
     }
   }
 

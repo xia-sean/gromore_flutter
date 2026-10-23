@@ -5,6 +5,7 @@ import io.flutter.plugin.common.MessageCodec
 import io.flutter.plugin.common.StandardMessageCodec
 import io.flutter.plugin.platform.PlatformView
 import io.flutter.plugin.platform.PlatformViewFactory
+import kotlin.math.roundToInt
 
 /**
  * GroMore 广告 PlatformView 工厂
@@ -25,8 +26,10 @@ internal class GromoreAdViewFactory(
     val params = args as? Map<*, *> ?: emptyMap<Any, Any>()
     val adId = params["adId"]?.toString() ?: ""
     val adType = params["adType"]?.toString()
-    val width = (params["width"] as? Number)?.toInt() ?: 0
-    val height = (params["height"] as? Number)?.toInt() ?: 0
+    // creationParams 是逻辑像素，Android LayoutParams 使用物理 px。
+    val density = context.resources.displayMetrics.density
+    val width = ((params["width"] as? Number)?.toDouble()?.times(density))?.roundToInt() ?: 0
+    val height = ((params["height"] as? Number)?.toDouble()?.times(density))?.roundToInt() ?: 0
     return GromoreAdPlatformView(
       context = context,
       adId = adId,

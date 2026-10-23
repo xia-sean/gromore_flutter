@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="gromore_android_app_id">5786586</string>
-    <string name="gromore_android_app_name">妖怪记账</string>
+    <string name="gromore_android_app_id">5899733</string>
+    <string name="gromore_android_app_name">Example-Android</string>
     <bool name="gromore_android_auto_init">true</bool>
     <bool name="gromore_android_debug">true</bool>
     <bool name="gromore_android_use_mediation">true</bool>

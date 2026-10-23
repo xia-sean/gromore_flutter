@@ -22,6 +22,38 @@ enum GromoreAdType {
   banner,
 }
 
+/// Feed/Draw 视频操作；stop 仅 iOS 支持。
+enum GromoreVideoAction {
+  /// 请求播放，由当前广告来源决定是否支持。
+  play,
+
+  /// 请求恢复播放。
+  resume,
+
+  /// 请求暂停播放。
+  pause,
+
+  /// 请求停止播放，仅 iOS 支持；Android 返回 unsupported。
+  stop,
+}
+
+/// 视频操作对应的原生参数。
+extension GromoreVideoActionValue on GromoreVideoAction {
+  /// 获取原生通道使用的操作名称。
+  String get value {
+    switch (this) {
+      case GromoreVideoAction.play:
+        return 'play';
+      case GromoreVideoAction.resume:
+        return 'resume';
+      case GromoreVideoAction.pause:
+        return 'pause';
+      case GromoreVideoAction.stop:
+        return 'stop';
+    }
+  }
+}
+
 /// 广告类型值转换
 extension GromoreAdTypeValue on GromoreAdType {
   /// 获取用于通道传输的字符串值

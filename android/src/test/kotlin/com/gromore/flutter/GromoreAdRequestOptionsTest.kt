@@ -9,6 +9,38 @@ import kotlin.test.assertTrue
 
 internal class GromoreAdRequestOptionsTest {
   @Test
+  fun logicalDimensionsScaleOnceAndNativeFallbackStaysInPixels() {
+    for ((density, expectedWidth) in listOf(1f to 321, 2f to 641, 3f to 962)) {
+      val options = GromoreAdRequestOptions(mapOf(
+        "sizeUnit" to "logicalPixels", "width" to 320.5, "height" to 100.25
+      ))
+      assertEquals(expectedWidth, options.dimensionPx("width", density, 1080))
+      assertEquals(when (density) { 1f -> 100; 2f -> 201; else -> 301 },
+        options.dimensionPx("height", density, 1920))
+      assertEquals(1920, options.dimensionPx("missing", density, 1920))
+    }
+    val options = GromoreAdRequestOptions(mapOf(
+      "sizeUnit" to "logicalPixels", "androidExtra" to mapOf("width" to "360.5")
+    ))
+    assertEquals(901, options.dimensionPx("width", 2.5f, 1080))
+  }
+
+  @Test
+  fun legacyAndExplicitNativeDimensionsAreNotScaled() {
+    for (request in listOf(
+      mapOf("width" to 960),
+      mapOf("sizeUnit" to "nativePixels", "width" to 960)
+    )) {
+      assertEquals(960, GromoreAdRequestOptions(request).dimensionPx("width", 3f, 1080))
+    }
+    val invalid = GromoreAdRequestOptions(mapOf(
+      "sizeUnit" to "logicalPixels", "width" to "invalid", "height" to Double.NaN
+    ))
+    assertEquals(1080, invalid.dimensionPx("width", 3f, 1080))
+    assertEquals(1920, invalid.dimensionPx("height", 3f, 1920))
+  }
+
+  @Test
   fun rewardParametersAreReadFromEverySupportedContainer() {
     val parameters = mapOf(
       "userId" to "test_user",

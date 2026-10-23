@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/gromore_banner_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/white"
+    android:padding="8dp">
+
+    <FrameLayout
+        android:id="@+id/gromore_feed_media"
+        android:layout_width="80dp"
+        android:layout_height="match_parent"
+        android:layout_marginBottom="18dp">
+        <ImageView
+            android:id="@+id/gromore_feed_main_image"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop" />
+        <ImageView
+            android:id="@+id/gromore_feed_icon"
+            android:layout_width="28dp"
+            android:layout_height="28dp"
+            android:layout_gravity="bottom|start"
+            android:scaleType="centerCrop" />
+    </FrameLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_marginStart="88dp"
+        android:layout_marginEnd="88dp"
+        android:gravity="center_vertical"
+        android:orientation="vertical">
+        <TextView
+            android:id="@+id/gromore_feed_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="2"
+            android:textColor="#1F2937"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+        <TextView
+            android:id="@+id/gromore_feed_desc"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="2"
+            android:textColor="#4B5563"
+            android:textSize="12sp" />
+        <TextView
+            android:id="@+id/gromore_feed_source"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxLines="1"
+            android:textColor="#6B7280"
+            android:textSize="10sp" />
+    </LinearLayout>
+
+    <TextView
+        android:id="@+id/gromore_feed_cta"
+        android:layout_width="80dp"
+        android:layout_height="36dp"
+        android:layout_gravity="end|center_vertical"
+        android:background="#2563EB"
+        android:gravity="center"
+        android:maxLines="1"
+        android:textColor="@android:color/white"
+        android:textSize="12sp" />
+
+    <FrameLayout
+        android:id="@+id/gromore_banner_logo"
+        android:layout_width="40dp"
+        android:layout_height="16dp"
+        android:layout_gravity="bottom|start">
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="广告"
+            android:textSize="10sp" />
+    </FrameLayout>
+</FrameLayout>

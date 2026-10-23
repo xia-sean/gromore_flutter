@@ -44,16 +44,16 @@ PODS:
   - BUTTSDKFramework/TTFFmpeg/LiveLite (1.48.2.3-premium)
   - BUTTSDKFramework/VolcLog (1.48.2.3-premium)
   - Flutter (1.0.0)
-  - gromore_flutter (2.2.4):
+  - gromore_flutter (2.2.5):
     - Ads-CN-Beta (= 7.8.0.5)
     - Flutter
-    - gromore_flutter/BUAdSDK (= 2.2.4)
-    - gromore_flutter/CSJMediation (= 2.2.4)
-  - gromore_flutter/BUAdSDK (2.2.4):
+    - gromore_flutter/BUAdSDK (= 2.2.5)
+    - gromore_flutter/CSJMediation (= 2.2.5)
+  - gromore_flutter/BUAdSDK (2.2.5):
     - Ads-CN-Beta (= 7.8.0.5)
     - Ads-CN-Beta/BUAdSDK (= 7.8.0.5)
     - Flutter
-  - gromore_flutter/CSJMediation (2.2.4):
+  - gromore_flutter/CSJMediation (2.2.5):
     - Ads-CN-Beta (= 7.8.0.5)
     - Ads-CN-Beta/CSJMediation (= 7.8.0.5)
     - Flutter
@@ -77,9 +77,9 @@ EXTERNAL SOURCES:
 SPEC CHECKSUMS:
   Ads-CN-Beta: 3a6a494935b7b310103c190a3b4249f8461136b3
   BUTTSDKFramework: 34f8f8d541da07e79e9c479eb71336d1e4d90fdd
-  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
-  gromore_flutter: f64935543841ce1eaf791de1ea5a4485f23d7668
+  Flutter: 71a624a5bc0c04062bf19101d501e466baf2fb47
+  gromore_flutter: 058551f6189485688a3ad87ba5d1816fa056d5f2
 
-PODFILE CHECKSUM: bd7e6033063869cdcf8fcc177d1d24c6b6677ca2
+PODFILE CHECKSUM: 27cb03cc5258d0ee2feb8dfaca9690d2d04d2b36
 
 COCOAPODS: 1.16.2

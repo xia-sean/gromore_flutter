@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gromore_flutter/gromore_flutter_method_channel.dart';
@@ -38,6 +40,28 @@ void main() {
   });
 
   /// loadAd 返回广告实例 ID
+  test('sized Config reaches native with logical units and no Dart scaling',
+      () async {
+    MethodCall? captured;
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      captured = call;
+      return 'mock-ad-id';
+    });
+    await platform.loadAd(
+      GromoreAdType.banner,
+      const GromoreBannerConfig(
+        placementId: 'banner',
+        width: 320.5,
+        height: 100.25,
+      ).toRequest(),
+    );
+    final request = (captured!.arguments as Map)['request'] as Map;
+    expect(request['width'], 320.5);
+    expect(request['height'], 100.25);
+    expect(request['sizeUnit'], 'logicalPixels');
+  });
+
   test('loadAd returns adId', () async {
     final adId = await platform.loadAd(
       GromoreAdType.splash,
@@ -116,5 +140,47 @@ void main() {
     final request = (captured!.arguments as Map)['request'] as Map;
     expect(request['androidExtra'], {'customData': 'android-data'});
     expect(request['iosExtra'], {'customData': 'ios-data'});
+  });
+
+  test('Map customData is encoded before crossing the native channel',
+      () async {
+    final requests = <Map>[];
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(channel, (call) async {
+      requests.add((call.arguments as Map)['request'] as Map);
+      return 'mock-ad-id';
+    });
+    await platform.loadAd(
+        GromoreAdType.rewardVideo,
+        const GromoreRewardConfig(
+          placementId: 'reward',
+          customData: {'orderId': 'typed'},
+        ).toRequest());
+    await platform.loadAd(
+        GromoreAdType.rewardVideo,
+        const GromoreAdRequest(placementId: 'reward', extra: {
+          'userId': '3',
+          'customData': {'rewardName': '金币', 'rewardAmount': 1},
+        }));
+    await platform.loadAd(
+        GromoreAdType.rewardVideo,
+        const GromoreAdRequest(
+          placementId: 'reward',
+          androidExtra: {
+            'customData': {'platform': 'android'}
+          },
+          iosExtra: {
+            'customData': {'platform': 'ios'}
+          },
+        ));
+    expect(
+        jsonDecode(requests[0]['customData'] as String), {'orderId': 'typed'});
+    expect(jsonDecode(requests[1]['customData'] as String),
+        {'rewardName': '金币', 'rewardAmount': 1});
+    expect(requests[1]['extra']['customData'], requests[1]['customData']);
+    expect(jsonDecode(requests[2]['androidExtra']['customData'] as String),
+        {'platform': 'android'});
+    expect(jsonDecode(requests[2]['iosExtra']['customData'] as String),
+        {'platform': 'ios'});
   });
 }

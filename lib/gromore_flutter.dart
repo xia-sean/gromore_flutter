@@ -15,3 +15,7 @@ export 'src/init_result.dart';
 export 'src/logger.dart';
 export 'src/privacy.dart';
 export 'src/visibility.dart';
+
+export 'src/ad_info.dart';
+export 'src/ad_controller.dart';
+export 'src/preload_request.dart';

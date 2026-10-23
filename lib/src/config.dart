@@ -1,3 +1,5 @@
+import 'package:flutter/services.dart';
+
 import 'ad_types.dart';
 import 'privacy.dart';
 
@@ -39,6 +41,7 @@ class GromoreConfig {
     this.privacy,
     this.enableLog,
     this.enableLogToFile = false,
+    this.iosSplashRestoreOrientations = const <DeviceOrientation>[],
   });
 
   /// Android AppId
@@ -77,6 +80,11 @@ class GromoreConfig {
   /// 是否同时写入日志文件
   /// 写入时遵循当前日志级别阈值，而不是只写入单个级别
   final bool enableLogToFile;
+
+  /// iOS 开屏关闭或展示失败后恢复的宿主方向限制，仅在 Dart 侧使用。
+  /// Flutter 无法读取宿主先前的方向设置，固定方向的宿主应显式传入同一列表。
+  /// 默认空列表表示交还系统决定；开屏只在展示阶段临时锁定竖屏。
+  final List<DeviceOrientation> iosSplashRestoreOrientations;
 
   /// 转为通道传输 Map
   Map<String, dynamic> toMap() {

@@ -5,13 +5,13 @@
 ![pub](https://img.shields.io/pub/v/gromore_flutter.svg)
 ![platform](https://img.shields.io/badge/platform-Android%20%7C%20iOS-4CAF50)
 ![license](https://img.shields.io/badge/license-Source--Available-9C27B0)
-![github](https://img.shields.io/badge/github-xia--sean%2Fgromore__flutter-black)
+[![github](https://img.shields.io/badge/github-xia--sean%2Fgromore__flutter-black)](https://github.com/xia-sean/gromore_flutter)
 
 # 📱 Flutter GroMore Ads
 
 <hr>
 
-<img src="doc/images/wechat_qr.png" width="120" alt="微信二维码" />
+<img src="doc/images/wechat_qr.png" width="120" alt="有问题可扫码反馈" />
 
 邮箱📬 [xm_sean@163.com](mailto:xm_sean@163.com)
 
@@ -46,13 +46,13 @@
 
 ## ⚡ 5 分钟接入
 
-当前插件版本：`2.2.4`；内置 Android GroMore `7.8.1.4`、iOS Ads-CN-Beta `7.8.0.5`。
+当前插件版本：`2.2.5`；内置 Android GroMore `7.8.1.4`、iOS Ads-CN-Beta `7.8.0.5`。
 
 ### 1. 添加依赖
 
 ```yaml
 dependencies:
-  gromore_flutter: ^2.2.4
+  gromore_flutter: ^2.2.5
 ```
 
 执行：
@@ -270,3 +270,7 @@ GromoreAdCallback(
 ## 📄 许可与联系
 
 本项目为源码可见项目。许可说明见 [LICENSE](LICENSE)、[LICENSE.zh-CN.md](LICENSE.zh-CN.md) 和 [CONTRIBUTING.md](CONTRIBUTING.md)。
+
+### 原生 SDK 扩展能力
+
+状态/诊断、多条 Feed/Draw、请求选项及视频控制的用法，见 [广告调用示例](doc/ad_examples.md)。

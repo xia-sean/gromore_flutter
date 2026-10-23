@@ -1,7 +1,95 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gromore_flutter/gromore_flutter.dart';
 
 void main() {
+  test('invalid sizes and known SDK numeric options fail before native loading',
+      () {
+    for (final key in ['width', 'height', 'logoHeight', 'splashTimeout']) {
+      for (final value in [0, -1, double.nan, double.infinity, 'invalid']) {
+        expect(
+            () => GromoreAdRequest(placementId: 'test', params: {key: value})
+                .toMap(),
+            throwsA(isA<ArgumentError>()
+                .having((error) => error.name, 'field', key)));
+      }
+    }
+    for (final options in [
+      {'orientation': 0},
+      {'orientation': 3},
+      {'adCount': 0},
+      {'adCount': 4},
+      {'adCount': 1.5},
+      {'volume': -0.1},
+      {'volume': 1.1},
+      {'rewardAmount': -1},
+      {'rewardAmount': 1.5},
+      {
+        'fullscreenReward': {'rewardAmount': -1}
+      },
+    ]) {
+      expect(
+          () => GromoreAdRequest(placementId: 'test', params: options).toMap(),
+          throwsArgumentError);
+    }
+    expect(() => const GromoreAdRequest(placementId: ' ').toMap(),
+        throwsArgumentError);
+  });
+  test('validation follows SDK precedence and allows omitted dimensions', () {
+    final map = const GromoreAdRequest(
+      placementId: 'test',
+      params: {'width': -1},
+      extra: {'width': 320.5},
+      androidExtra: {'width': -10},
+      iosExtra: {'width': -20},
+    ).toMap();
+    expect(map['width'], 320.5);
+    expect(
+        () =>
+            const GromoreBannerConfig(placementId: 'test').toRequest().toMap(),
+        returnsNormally);
+    expect(
+        () => const GromoreAdRequest(
+            placementId: 'test', androidExtra: {'height': -1}).toMap(),
+        throwsArgumentError);
+  });
+  test('sized configs use logical pixels and preserve fractional dimensions',
+      () {
+    const configs = <GromoreAdConfig>[
+      GromoreSplashConfig(placementId: 's', width: 320.5, height: 100.25),
+      GromoreBannerConfig(placementId: 'b', width: 320.5, height: 100.25),
+      GromoreFeedConfig(placementId: 'f', width: 320.5, height: 100.25),
+      GromoreDrawConfig(placementId: 'd', width: 320.5, height: 100.25),
+    ];
+    for (final config in configs) {
+      final request = config.toRequest().toMap();
+      expect(request['width'], 320.5);
+      expect(request['height'], 100.25);
+      expect(request['sizeUnit'], 'logicalPixels');
+    }
+  });
+
+  test('native size opt-out and legacy requests avoid double conversion', () {
+    final map = const GromoreBannerConfig(
+      placementId: 'b',
+      width: 960,
+      height: 300,
+      options: GromoreRequestOptions(sizeUnit: GromoreAdSizeUnit.nativePixels),
+    ).toRequest().toMap();
+    expect(map['width'], 960);
+    expect(map['sizeUnit'], 'nativePixels');
+    expect(const GromoreAdRequest(placementId: 'legacy').toMap()['sizeUnit'],
+        'nativePixels');
+    expect(
+        const GromoreAdRequest(
+          placementId: 'logical',
+          sizeUnit: GromoreAdSizeUnit.logicalPixels,
+          params: {'width': 320.5},
+        ).toMap()['sizeUnit'],
+        'logicalPixels');
+  });
+
   test('reward config serializes GroMore server verification parameters', () {
     const config = GromoreRewardConfig(
       placementId: 'reward-placement',
@@ -149,5 +237,118 @@ void main() {
       }
     }
     expect(configs.first.toRequest().toMap()['splashTimeout'], 2500);
+  });
+
+  test('reward config accepts JSON-compatible maps without changing input', () {
+    final data = <String, dynamic>{
+      'rewardName': '金币',
+      'rewardAmount': 1,
+      'nested': {
+        'items': [true, null, '订单']
+      },
+    };
+    final config = GromoreRewardConfig(placementId: 'reward', customData: data);
+    final encoded = config.toRequest().toMap()['customData'];
+    expect(encoded, isA<String>());
+    expect(jsonDecode(encoded as String), data);
+    expect(config.customData, same(data));
+    expect(data['nested'], isA<Map>());
+  });
+
+  test('extra customData maps reach both envelope and top-level as strings',
+      () {
+    const data = {'rewardName': '金币', 'rewardAmount': 1};
+    const extra = {'userId': '3', 'customData': data};
+    final request = const GromoreAdRequest(
+      placementId: 'reward',
+      extra: extra,
+    ).toMap();
+    expect(jsonDecode(request['customData'] as String), data);
+    expect((request['extra'] as Map)['customData'], request['customData']);
+    expect(extra['customData'], data);
+  });
+
+  test('platform customData and fullscreen reward maps are normalized', () {
+    const android = {
+      'customData': {'platform': 'android'}
+    };
+    const ios = {
+      'customData': {'platform': 'ios'}
+    };
+    final request = const GromoreFullscreenVideoConfig(
+      placementId: 'fullscreen',
+      androidExtra: android,
+      iosExtra: ios,
+      options: GromoreRequestOptions(fullscreenReward: {
+        'userId': '3',
+        'customData': {'orderId': 'ios-order'},
+      }),
+    ).toRequest().toMap();
+    expect(jsonDecode(request['androidExtra']['customData'] as String),
+        {'platform': 'android'});
+    expect(jsonDecode(request['iosExtra']['customData'] as String),
+        {'platform': 'ios'});
+    expect(jsonDecode(request['fullscreenReward']['customData'] as String),
+        {'orderId': 'ios-order'});
+    expect(android['customData'], isA<Map>());
+    expect(ios['customData'], isA<Map>());
+  });
+
+  test('Map serialization preserves extra override precedence', () {
+    final request = const GromoreRewardConfig(
+      placementId: 'reward',
+      customData: {'source': 'config'},
+      extra: {
+        'customData': {'source': 'extra'}
+      },
+      androidExtra: {
+        'customData': {'source': 'android'}
+      },
+    ).toRequest().toMap();
+    expect(jsonDecode(request['customData'] as String), {'source': 'extra'});
+    expect(jsonDecode(request['androidExtra']['customData'] as String),
+        {'source': 'android'});
+  });
+
+  test('String customData is preserved verbatim including non-JSON and empty',
+      () {
+    for (final data in ['', 'raw-data', ' { "order": "金币" } ', '{}']) {
+      final request = GromoreRewardConfig(
+        placementId: 'reward',
+        customData: data,
+      ).toRequest().toMap();
+      expect(request['customData'], data);
+    }
+    expect(
+        const GromoreRewardConfig(placementId: 'reward')
+            .toRequest()
+            .toMap()
+            .containsKey('customData'),
+        isFalse);
+    expect(
+        const GromoreRewardConfig(placementId: 'reward', customData: {})
+            .toRequest()
+            .toMap()['customData'],
+        '{}');
+  });
+
+  test('unsupported customData types and non-JSON map values fail clearly', () {
+    for (final data in [
+      1,
+      false,
+      ['order']
+    ]) {
+      expect(
+          () => GromoreRewardConfig(placementId: 'reward', customData: data)
+              .toRequest()
+              .toMap(),
+          throwsArgumentError);
+    }
+    expect(
+        () => GromoreRewardConfig(
+              placementId: 'reward',
+              customData: {'date': DateTime(2026)},
+            ).toRequest().toMap(),
+        throwsA(isA<JsonUnsupportedObjectError>()));
   });
 }

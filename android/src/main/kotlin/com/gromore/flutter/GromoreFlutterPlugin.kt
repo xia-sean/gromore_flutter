@@ -263,8 +263,16 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
       return
     }
     val adId = manager.newAdId()
-    manager.loadAd(adId, adType, placementId, request)
-    result.success(adId)
+    try {
+      manager.loadAd(adId, adType, placementId, request)
+      result.success(adId)
+    } catch (error: GromoreAdException) {
+      manager.disposeAd(adId)
+      result.error(error.code, error.message, null)
+    } catch (error: Exception) {
+      manager.disposeAd(adId)
+      result.error("load_failed", error.message, null)
+    }
   }
 
   /**
@@ -280,8 +288,15 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
       result.error("invalid_args", "adId is missing.", null)
       return
     }
-    adManager?.showAd(adId)
-    result.success(null)
+    try {
+      val manager = adManager ?: throw GromoreAdException("not_ready", "Ad manager is unavailable")
+      manager.showAd(adId)
+      result.success(null)
+    } catch (error: GromoreAdException) {
+      result.error(error.code, error.message, null)
+    } catch (error: Exception) {
+      result.error("show_failed", error.message, null)
+    }
   }
 
   /**
@@ -310,7 +325,52 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
   private fun handleInvokeNative(call: MethodCall, result: Result) {
     val args = call.arguments as? Map<*, *>
     val method = args?.get("method") as? String ?: "unknown"
+    val options = args?.get("args") as? Map<*, *> ?: emptyMap<Any, Any>()
+    try {
     when (method) {
+      "getAdIds", "getAdState", "getAdDiagnostics", "controlVideo", "showSplashCard", "hideSplashSkipButton" -> {
+        val manager = adManager ?: throw GromoreAdException("not_ready", "Ad manager is unavailable")
+        result.success(manager.operation(method, options))
+      }
+      "getSdkInfo" -> result.success(mapOf("version" to TTAdSdk.SDK_VERSION_NAME,
+        "isReady" to TTAdSdk.isSdkReady(), "isInitialized" to TTAdSdk.isInitSuccess()))
+      "updateConfig" -> {
+        GromoreFlutterInitializer.updateConfig(options)
+        result.success(null)
+      }
+      "preloadAds" -> {
+        val currentActivity = activity ?: throw GromoreAdException("no_activity", "Activity is null")
+        val requests = options["requests"] as? List<*> ?: throw GromoreAdException("invalid_args", "requests required")
+        val infos = requests.map { raw ->
+          val item = raw as? Map<*, *> ?: throw GromoreAdException("invalid_args", "Invalid preload item")
+          val request = item["request"] as? Map<*, *> ?: item
+          val placement = request["placementId"] as? String ?: throw GromoreAdException("invalid_args", "placementId required")
+          val type = when (item["adType"]) {
+            "splash" -> 3
+            "rewardVideo" -> 7
+            "fullscreenVideo", "interstitial" -> 8
+            "banner" -> 1
+            "native" -> 5
+            "draw_native" -> 9
+            else -> throw GromoreAdException("invalid_args", "Unknown preload adType")
+          }
+          val adSlot = if (type == 7) GromoreAdRequestOptions(request).rewardSlot(placement)
+          else com.bytedance.sdk.openadsdk.AdSlot.Builder().setCodeId(placement)
+            .setOrientation(GromoreAdRequestOptions(request).int("orientation", 1))
+            .setAdCount(GromoreAdRequestOptions(request).int("adCount", 1).coerceIn(1, 3))
+            .setMediationAdSlot(GromoreAdRequestOptions(request).mediationSlot())
+            .setImageAcceptedSize(GromoreAdRequestOptions(request).dimensionPx("width", currentActivity.resources.displayMetrics.density, 1080),
+              GromoreAdRequestOptions(request).dimensionPx("height", currentActivity.resources.displayMetrics.density, 1920)).build()
+          com.bytedance.sdk.openadsdk.mediation.MediationPreloadRequestInfo(type, adSlot,
+            (item["primeRitList"] as? List<*>)?.filterIsInstance<String>() ?: emptyList())
+        }
+        val interval = (options["interval"] as? Number)?.toInt() ?: 1
+        val concurrent = (options["concurrent"] as? Number)?.toInt() ?: 2
+        if (infos.isEmpty() || interval !in 1..10 || concurrent !in 1..20)
+          throw GromoreAdException("invalid_args", "interval must be 1..10, concurrent 1..20")
+        TTAdSdk.getMediationManager().preload(currentActivity, infos, interval, concurrent)
+        result.success(null)
+      }
       "isSdkReady" -> result.success(TTAdSdk.isSdkReady())
       "isInitSuccess" -> result.success(TTAdSdk.isInitSuccess())
       "getInitializationStatus" -> {
@@ -347,6 +407,11 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
         emitLog("warn", "invokeNative not implemented: $method", "native")
         result.error("not_implemented", "invokeNative is not implemented: $method", null)
       }
+    }
+    } catch (error: GromoreAdException) {
+      result.error(error.code, error.message, null)
+    } catch (error: Exception) {
+      result.error("native_error", error.message, null)
     }
   }
 

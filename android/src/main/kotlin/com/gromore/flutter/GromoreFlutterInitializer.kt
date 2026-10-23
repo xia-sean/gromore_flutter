@@ -381,6 +381,24 @@ internal object GromoreFlutterInitializer {
     )
   }
 
+  /**
+   * 初始化成功后更新 SDK 允许的运行期字段，不调用 init/start。
+   * 支持 privacy/userInfoForSegment/localExtra/themeStatus/publisherDid；
+   * 先校验所有键，不支持的键返回 unsupported，防止错误配置被静默忽略。
+   */
+  fun updateConfig(options: Map<*, *>) {
+    val supported = setOf("privacy", "userInfoForSegment", "localExtra", "themeStatus", "publisherDid")
+    if (options.keys.any { it !in supported }) throw GromoreAdException("unsupported", "Unknown runtime config key")
+    val manager = TTAdSdk.getMediationManager()
+    if (options.containsKey("privacy")) manager.updatePrivacyConfig(buildPrivacyCustomController(options))
+    buildMediationSegmentInfo(options["userInfoForSegment"] as? Map<*, *>)?.let { manager.setUserInfoForSegment(it) }
+    (options["localExtra"] as? Map<*, *>)?.let { raw ->
+      manager.updateLocalExtra(raw.entries.filter { it.value != null }.associate { it.key.toString() to it.value!! })
+    }
+    (options["themeStatus"] as? Number)?.let { manager.setThemeStatus(it.toInt()) }
+    (options["publisherDid"] as? String)?.let { manager.setPulisherDid(it) }
+  }
+
   private fun buildPrivacyCustomController(androidOptions: Map<*, *>): TTCustomController {
     val privacy = androidOptions["privacy"] as? Map<*, *> ?: emptyMap<Any, Any>()
     return object : TTCustomController() {

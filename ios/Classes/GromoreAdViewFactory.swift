@@ -89,6 +89,6 @@ final class GromoreAdPlatformView: NSObject, FlutterPlatformView {
 
   /// 销毁视图
   deinit {
-    adManager.detachAdView(adId: adId)
+    adManager.detachAdView(adId: adId, container: containerView)
   }
 }

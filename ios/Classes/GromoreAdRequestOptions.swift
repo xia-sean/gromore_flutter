@@ -37,6 +37,22 @@ struct GromoreAdRequestOptions {
     return nil
   }
 
+  /// Flutter 逻辑像素在 iOS 对应 pt，保留小数，不乘屏幕 scale。
+  func dimension(_ key: String, fallback: CGFloat) -> CGFloat {
+    let number: Double?
+    if let raw = value(key) as? NSNumber { number = raw.doubleValue }
+    else if let raw = value(key) as? String { number = Double(raw) }
+    else { number = nil }
+    guard let number = number, number.isFinite else { return fallback }
+    return CGFloat(number)
+  }
+
+  func configureSlot(_ slot: BUAdSlot) {
+    if let muted = bool("muted") { slot.mediation.mutedIfCan = muted }
+    if let scenario = string("scenarioId") { slot.mediation.scenarioID = scenario }
+    if let bidNotify = bool("bidNotify") { slot.mediation.bidNotify = bidNotify }
+  }
+
   func rewardModel() -> BURewardedVideoModel {
     let model = BURewardedVideoModel()
     model.userId = string("userId") ?? ""
@@ -47,11 +63,11 @@ struct GromoreAdRequestOptions {
   }
 
   func splashSize(fallback: CGSize) -> CGSize {
-    let width = int("width", fallback: Int(fallback.width))
-    let height = int("height", fallback: Int(fallback.height))
+    let width = dimension("width", fallback: fallback.width)
+    let height = dimension("height", fallback: fallback.height)
     return CGSize(
-      width: width > 0 ? CGFloat(width) : fallback.width,
-      height: height > 0 ? CGFloat(height) : fallback.height
+      width: width > 0 ? width : fallback.width,
+      height: height > 0 ? height : fallback.height
     )
   }
 

@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:gromore_flutter/gromore_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// 示例应用入口
 void main() {
@@ -34,9 +36,6 @@ class _GromoreExampleAppState extends State<GromoreExampleApp> {
   /// 广告事件订阅
   StreamSubscription<GromoreAdEvent>? _adEventSubscription;
 
-  /// 日志事件订阅
-  StreamSubscription<LogEvent>? _logEventSubscription;
-
   /// 初始化状态与订阅
   @override
   void initState() {
@@ -47,6 +46,9 @@ class _GromoreExampleAppState extends State<GromoreExampleApp> {
           ? LogLevel.error
           : LogLevel.info;
       String suffix = event.errorMessage ?? '';
+      if (event.eventType == GromoreAdEventType.failed && event.data != null) {
+        suffix = '$suffix details=${jsonEncode(event.data)}';
+      }
       if (event.eventType == GromoreAdEventType.rendered) {
         final data = event.data;
         final width = data?['renderWidth'];
@@ -62,16 +64,13 @@ class _GromoreExampleAppState extends State<GromoreExampleApp> {
         source: LogSource.dart,
       ));
     });
-    _logEventSubscription = GromoreFlutter.instance.logEvents.listen((event) {
-      _logStore.add(event);
-    });
   }
 
   /// 释放资源
   @override
   void dispose() {
     _adEventSubscription?.cancel();
-    _logEventSubscription?.cancel();
+    GromoreLogger.setHandler(null);
     _config.dispose();
     super.dispose();
   }
@@ -108,30 +107,35 @@ class _GromoreExampleAppState extends State<GromoreExampleApp> {
               AdPage(
                 title: '开屏广告',
                 adType: GromoreAdType.splash,
+                tabIndex: 1,
                 config: _config,
                 logStore: _logStore,
               ),
               AdPage(
                 title: '插屏广告',
                 adType: GromoreAdType.interstitial,
+                tabIndex: 2,
                 config: _config,
                 logStore: _logStore,
               ),
               AdPage(
                 title: '全屏视频',
                 adType: GromoreAdType.fullscreenVideo,
+                tabIndex: 3,
                 config: _config,
                 logStore: _logStore,
               ),
               AdPage(
                 title: '激励视频',
                 adType: GromoreAdType.rewardVideo,
+                tabIndex: 4,
                 config: _config,
                 logStore: _logStore,
               ),
               AdPage(
                 title: '信息流',
                 adType: GromoreAdType.native,
+                tabIndex: 5,
                 config: _config,
                 logStore: _logStore,
                 showSize: true,
@@ -139,6 +143,7 @@ class _GromoreExampleAppState extends State<GromoreExampleApp> {
               AdPage(
                 title: 'Draw 信息流',
                 adType: GromoreAdType.drawNative,
+                tabIndex: 6,
                 config: _config,
                 logStore: _logStore,
                 showSize: true,
@@ -146,6 +151,7 @@ class _GromoreExampleAppState extends State<GromoreExampleApp> {
               AdPage(
                 title: 'Banner',
                 adType: GromoreAdType.banner,
+                tabIndex: 7,
                 config: _config,
                 logStore: _logStore,
                 showSize: true,
@@ -179,6 +185,16 @@ class ExampleConfig {
   static const String _iosAppNameDefault = 'Example-iOS';
 
   static const Map<GromoreAdType, String> _androidPlacementDefaults = {
+    GromoreAdType.splash: '104719099',
+    GromoreAdType.interstitial: '104720303',
+    GromoreAdType.fullscreenVideo: '104720207',
+    GromoreAdType.rewardVideo: '104719498',
+    GromoreAdType.native: '104720206',
+    GromoreAdType.drawNative: '104719398',
+    GromoreAdType.banner: '104720304',
+  };
+
+  static const Map<GromoreAdType, String> _iosPlacementDefaults = {
     GromoreAdType.splash: '104037358',
     GromoreAdType.interstitial: '104036683',
     GromoreAdType.fullscreenVideo: '104036683',
@@ -188,26 +204,16 @@ class ExampleConfig {
     GromoreAdType.banner: '104037605',
   };
 
-  static const Map<GromoreAdType, String> _iosPlacementDefaults = {
-    GromoreAdType.splash: '103866437',
-    GromoreAdType.interstitial: '103866249',
-    GromoreAdType.fullscreenVideo: '103866249',
-    GromoreAdType.rewardVideo: '103866251',
-    GromoreAdType.native: '103866159',
-    GromoreAdType.drawNative: '103866346',
-    GromoreAdType.banner: '103864578',
-  };
-
-  /// Android AppId 输入控制器（示例默认值：5786586）
+  /// Android AppId 输入控制器（留空时使用原生配置：5899733）
   final TextEditingController androidAppId = TextEditingController();
 
-  /// Android AppName 输入控制器（示例默认值：妖怪记账）
+  /// Android AppName 输入控制器（留空时使用原生配置：Example-Android）
   final TextEditingController androidAppName = TextEditingController();
 
-  /// iOS AppId 输入控制器（示例默认值：5786645）
+  /// iOS AppId 输入控制器（示例默认值：5820777）
   final TextEditingController iosAppId = TextEditingController();
 
-  /// iOS AppName 输入控制器（示例默认值：妖怪记账）
+  /// iOS AppName 输入控制器（示例默认值：Example-iOS）
   final TextEditingController iosAppName = TextEditingController();
 
   /// 各广告类型代码位输入控制器（示例默认值仅用于演示）
@@ -239,16 +245,13 @@ class ExampleConfig {
   bool logEnabled = true;
 
   /// 是否写入日志文件
-  bool logToFileEnabled = false;
+  bool logToFileEnabled = true;
 
   /// 日志级别
   LogLevel logLevel = LogLevel.info;
 
   /// 是否已初始化 SDK
   bool isInitialized = false;
-
-  /// iOS ATT 是否已请求
-  bool attRequested = false;
 
   /// 启用的广告类型集合
   Set<GromoreAdType> enabledAdTypes = {};
@@ -398,7 +401,6 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Future<void> _requestAtt() async {
     final granted = await GromoreFlutter.instance.requestATT();
-    widget.config.attRequested = true;
     widget.logStore.add(LogEvent(
       level: LogLevel.info,
       message: 'ATT result: $granted',
@@ -406,13 +408,6 @@ class _SettingsPageState extends State<SettingsPage> {
       timestamp: DateTime.now(),
       source: LogSource.dart,
     ));
-    if (!mounted) {
-      return;
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(granted ? 'ATT 已授权或无需授权' : 'ATT 未授权')),
-    );
-    setState(() {});
   }
 
   Future<void> _showInitDialog({
@@ -485,10 +480,34 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// 执行初始化逻辑
   Future<void> _initialize() async {
+    if (_isInitializing) return;
     setState(() {
       _isInitializing = true;
     });
     try {
+      if (widget.config.isIos) {
+        final confirmed = await showCupertinoDialog<bool>(
+          context: context,
+          builder: (context) => CupertinoAlertDialog(
+            title: const Text('请求 ATT'),
+            content: const Text('是否请求 App 跟踪权限并继续初始化 SDK？系统权限选择完成后将继续初始化。'),
+            actions: [
+              CupertinoDialogAction(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: const Text('取消'),
+              ),
+              CupertinoDialogAction(
+                isDefaultAction: true,
+                onPressed: () => Navigator.of(context).pop(true),
+                child: const Text('请求 ATT'),
+              ),
+            ],
+          ),
+        );
+        if (!mounted || confirmed != true) return;
+        await _requestAtt();
+        if (!mounted) return;
+      }
       await GromoreFlutter.instance.setLogLevel(widget.config.logLevel);
       await GromoreFlutter.instance.setLogEnabled(widget.config.logEnabled);
       final result =
@@ -551,23 +570,6 @@ class _SettingsPageState extends State<SettingsPage> {
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         const SizedBox(height: 8),
-        if (isIos) ...[
-          SizedBox(
-            width: double.infinity,
-            child: OutlinedButton(
-              onPressed: _requestAtt,
-              child: Text(
-                widget.config.attRequested ? '重新请求 ATT' : '先请求 ATT',
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'iOS 建议先请求 ATT，再初始化 SDK；示例工程已预置 ATT 文案与基础 SKAdNetworkItems。',
-            style: TextStyle(color: Colors.black54),
-          ),
-          const SizedBox(height: 8),
-        ],
         if (isAndroid) ...[
           const Text(
             'Android 宿主接入方式',
@@ -706,7 +708,6 @@ class _SettingsPageState extends State<SettingsPage> {
                   width: itemWidth,
                   child: CheckboxListTile(
                     dense: true,
-                    visualDensity: VisualDensity.compact,
                     contentPadding: EdgeInsets.zero,
                     title: Text(type.value),
                     value: widget.config.enabledAdTypes.contains(type),
@@ -772,6 +773,7 @@ class AdPage extends StatefulWidget {
     required this.config,
     required this.logStore,
     this.showSize = false,
+    this.tabIndex,
   }) : super(key: key);
 
   /// 页面标题
@@ -788,6 +790,9 @@ class AdPage extends StatefulWidget {
 
   /// 是否展示宽高输入
   final bool showSize;
+
+  /// 位于示例 TabBarView 时使用；离开标签页即释放广告。
+  final int? tabIndex;
 
   @override
   State<AdPage> createState() => _AdPageState();
@@ -882,203 +887,196 @@ class _AdPageState extends State<AdPage> {
   /// 是否展示嵌入式广告视图（Banner/信息流）
   bool _showEmbeddedView = false;
 
-  /// 加载广告
-  Future<String?> _loadAd() async {
-    final placementId = widget.config.placementId(widget.adType);
-    if (placementId.isEmpty) {
-      widget.logStore.add(LogEvent(
-        level: LogLevel.error,
-        message: 'PlacementId 不能为空',
-        tag: 'ad',
-        timestamp: DateTime.now(),
-        source: LogSource.dart,
-      ));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('PlacementId 不能为空')),
-        );
-      }
-      return null;
-    }
-    setState(() {
-      _isLoading = true;
-      _showEmbeddedView = false;
-    });
-    try {
-      final Map<String, dynamic> extra = {};
-      if (widget.showSize) {
-        final double ratio = defaultTargetPlatform == TargetPlatform.android
-            ? MediaQuery.of(context).devicePixelRatio
-            : 1;
-        final double width =
-            double.tryParse(widget.config.widthController.text) ?? 0;
-        final double height =
-            double.tryParse(widget.config.heightController.text) ?? 0;
-        extra['width'] = (width * ratio).round();
-        extra['height'] = (height * ratio).round();
-      }
-      if (widget.adType == GromoreAdType.rewardVideo) {
-        extra['userId'] = 'test_user';
-        extra['rewardName'] = '金币';
-        extra['rewardAmount'] = 1;
-        extra['customData'] = '{"source":"flutter_example"}';
-      }
-      final request = GromoreAdRequest(
-        placementId: placementId,
-        extra: extra.isEmpty ? null : extra,
-      );
-      final adId = await GromoreFlutter.instance.loadAd(widget.adType, request);
-      setState(() {
-        _adId = adId;
-        _showEmbeddedView = false;
-      });
-      widget.logStore.add(LogEvent(
-        level: LogLevel.info,
-        message: 'loadAd success: $adId',
-        tag: 'ad',
-        timestamp: DateTime.now(),
-        source: LogSource.dart,
-      ));
-      return adId;
-    } catch (error) {
-      widget.logStore.add(LogEvent(
-        level: LogLevel.error,
-        message: 'loadAd failed: $error',
-        tag: 'ad',
-        timestamp: DateTime.now(),
-        source: LogSource.dart,
-      ));
-      return null;
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+  GromoreAdController? _adController;
+
+  // 销毁/重新加载时使旧的异步结果失效。
+  int _operation = 0;
+  double _viewWidth = 0;
+  double _viewHeight = 0;
+
+  TabController? _tabController;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = DefaultTabController.maybeOf(context);
+    if (_tabController == controller) return;
+    _tabController?.removeListener(_onTabChanged);
+    _tabController = controller;
+    _tabController?.addListener(_onTabChanged);
+  }
+
+  void _onTabChanged() {
+    if (widget.tabIndex != null &&
+        _tabController?.index != widget.tabIndex &&
+        (_adController != null || _isLoading)) {
+      _disposeAd();
     }
   }
 
-  /// 展示广告
-  Future<void> _showAd() async {
-    if (_isLoading || _isShowing) {
-      return;
+  void _log(String message, {LogLevel level = LogLevel.info}) {
+    widget.logStore.add(LogEvent(
+      level: level,
+      message: message,
+      tag: 'ad',
+      timestamp: DateTime.now(),
+      source: LogSource.dart,
+    ));
+  }
+
+  /// Config 与 View 使用相同的 Flutter 逻辑像素，插件内部处理平台转换。
+  GromoreAdConfig _buildAdConfig() {
+    final placementId = widget.config.placementId(widget.adType);
+    if (placementId.isEmpty) throw ArgumentError('PlacementId 不能为空');
+    if (_isEmbeddedType(widget.adType)) {
+      _viewWidth = double.tryParse(widget.config.widthController.text) ?? 0;
+      _viewHeight = double.tryParse(widget.config.heightController.text) ?? 0;
+      if (!_viewWidth.isFinite ||
+          !_viewHeight.isFinite ||
+          _viewWidth <= 0 ||
+          _viewHeight <= 0) {
+        throw ArgumentError('请输入正确的广告宽高');
+      }
     }
-    if (!widget.config.isInitialized) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('请先初始化 SDK')),
+    final width = _viewWidth;
+    final height = _viewHeight;
+    switch (widget.adType) {
+      case GromoreAdType.splash:
+        return GromoreSplashConfig(
+          placementId: placementId,
+          timeoutMillis: 3000,
         );
-      }
+      case GromoreAdType.interstitial:
+        return GromoreInterstitialConfig(placementId: placementId);
+      case GromoreAdType.fullscreenVideo:
+        return GromoreFullscreenVideoConfig(placementId: placementId);
+      case GromoreAdType.rewardVideo:
+        return GromoreRewardConfig(
+          placementId: placementId,
+          userId: 'test_user',
+          rewardName: '金币',
+          rewardAmount: 1,
+          customData: {'source': 'flutter_example'},
+        );
+      case GromoreAdType.banner:
+        return GromoreBannerConfig(
+            placementId: placementId, width: width, height: height);
+      case GromoreAdType.native:
+        return GromoreFeedConfig(
+            placementId: placementId, width: width, height: height, adCount: 1);
+      case GromoreAdType.drawNative:
+        return GromoreDrawConfig(
+            placementId: placementId, width: width, height: height, adCount: 1);
+    }
+  }
+
+  /// 等待可展示 → 监听当前实例 → showAd 或挂载视图。
+  Future<void> _showAd() async {
+    if (_isLoading || _isShowing) return;
+    if (!widget.config.isInitialized) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先初始化 SDK')),
+      );
       return;
     }
-
-    if (_adId != null) {
-      await _disposeAd();
-    }
-
-    setState(() {
-      _isShowing = true;
-    });
-
-    StreamSubscription<GromoreAdEvent>? sub;
-    final completer = Completer<GromoreAdEvent>();
-    String? pendingAdId;
-    sub = GromoreFlutter.instance.adEvents.listen((event) {
-      if (pendingAdId == null) {
-        return;
-      }
-      if (event.adId == pendingAdId &&
-          (event.eventType == GromoreAdEventType.loaded ||
-              event.eventType == GromoreAdEventType.failed ||
-              event.eventType == GromoreAdEventType.error)) {
-        if (!completer.isCompleted) {
-          completer.complete(event);
-        }
-      }
-    });
-
+    final operation = ++_operation;
+    setState(() => _isLoading = true);
     try {
-      final adId = await _loadAd();
-      if (adId == null) {
-        return;
-      }
-      pendingAdId = adId;
-      final event = await completer.future.timeout(
-        const Duration(seconds: 15),
-        onTimeout: () => throw TimeoutException('广告加载超时'),
+      await _releaseCurrentAd();
+      if (!mounted || operation != _operation) return;
+      final config = _buildAdConfig();
+      final controller = GromoreAdController(
+        adType: widget.adType,
+        callback: GromoreAdCallback(
+          onShown: (event) {
+            _log('广告展示: ${event.adId}');
+            _finishLoading(operation);
+          },
+          onClicked: (event) => _log('广告点击: ${event.adId}'),
+          onCompleted: (event) => _log('视频播放完成: ${event.adId}'),
+          onSkipped: (event) {
+            _log('视频跳过: ${event.adId}');
+            if (_adId == event.adId) _disposeAd();
+          },
+          onRewarded: (event) {
+            // 客户端用于展示状态，实际发奖仍由服务端验签并去重。
+            _log('激励回调: verify=${event.rewardVerify}, '
+                'tradeId=${event.tradeId}, customData=${event.customData}');
+          },
+          onClosed: (event) {
+            _log('广告关闭: ${event.adId}');
+            if (_adId == event.adId) _disposeAd();
+          },
+          onFailed: (event) {
+            _log('广告失败: ${event.errorMessage}', level: LogLevel.error);
+            if (_adId == event.adId) _disposeAd();
+          },
+        ),
       );
-      if (event.eventType == GromoreAdEventType.failed ||
-          event.eventType == GromoreAdEventType.error) {
-        widget.logStore.add(LogEvent(
-          level: LogLevel.error,
-          message: 'loadAd failed: ${event.errorMessage ?? 'unknown'}',
-          tag: 'ad',
-          timestamp: DateTime.now(),
-          source: LogSource.dart,
-        ));
+      _adController = controller;
+      final ids = await controller.load(config);
+      if (!mounted || operation != _operation) {
+        await controller.dispose();
         return;
       }
-
+      final adId = ids.first;
+      _adId = adId;
+      _log('广告加载成功: $adId');
       if (_isEmbeddedType(widget.adType)) {
         setState(() {
           _showEmbeddedView = true;
         });
-      }
-
-      await GromoreFlutter.instance.showAd(adId);
-      widget.logStore.add(LogEvent(
-        level: LogLevel.info,
-        message: 'showAd invoked: $adId',
-        tag: 'ad',
-        timestamp: DateTime.now(),
-        source: LogSource.dart,
-      ));
-    } catch (error) {
-      widget.logStore.add(LogEvent(
-        level: LogLevel.error,
-        message: 'showAd failed: $error',
-        tag: 'ad',
-        timestamp: DateTime.now(),
-        source: LogSource.dart,
-      ));
-    } finally {
-      await sub.cancel();
-      if (mounted) {
+        // Banner/Feed/Draw 通过下方的专用视图展示，不调用 showAd。
+      } else {
         setState(() {
-          _isShowing = false;
+          _isShowing = true;
         });
+        await controller.show();
+        // showAd 返回只代表已发起展示，loading 等到 shown 才收起。
       }
+    } catch (error) {
+      _log('加载/展示失败: $error', level: LogLevel.error);
+      if (operation == _operation) await _disposeAd();
     }
   }
 
-  /// 销毁广告
+  void _finishLoading(int operation) {
+    if (!mounted || operation != _operation || !_isLoading) return;
+    setState(() {
+      _isLoading = false;
+      _isShowing = !_isEmbeddedType(widget.adType);
+    });
+  }
+
+  Future<void> _releaseCurrentAd() async {
+    final controller = _adController;
+    final adId = _adId;
+    _adController = null;
+    _adId = null;
+    _showEmbeddedView = false;
+    await controller?.dispose();
+    if (adId != null) _log('disposeAd: $adId');
+  }
+
+  /// 手动销毁、关闭或失败时取消监听并释放广告。
   Future<void> _disposeAd() async {
-    if (_adId == null) {
-      return;
-    }
-    try {
-      await GromoreFlutter.instance.disposeAd(_adId!);
-      widget.logStore.add(LogEvent(
-        level: LogLevel.info,
-        message: 'disposeAd invoked: $_adId',
-        tag: 'ad',
-        timestamp: DateTime.now(),
-        source: LogSource.dart,
-      ));
-    } catch (error) {
-      widget.logStore.add(LogEvent(
-        level: LogLevel.error,
-        message: 'disposeAd failed: $error',
-        tag: 'ad',
-        timestamp: DateTime.now(),
-        source: LogSource.dart,
-      ));
-    } finally {
+    ++_operation;
+    final release = _releaseCurrentAd();
+    if (mounted) {
       setState(() {
-        _adId = null;
-        _showEmbeddedView = false;
+        _isLoading = false;
+        _isShowing = false;
       });
     }
+    await release;
+  }
+
+  @override
+  void dispose() {
+    _tabController?.removeListener(_onTabChanged);
+    ++_operation;
+    _releaseCurrentAd();
+    super.dispose();
   }
 
   /// 判断是否为嵌入式广告类型（Banner/信息流）
@@ -1097,31 +1095,34 @@ class _AdPageState extends State<AdPage> {
         !_isEmbeddedType(widget.adType)) {
       return const SizedBox.shrink();
     }
-    final double width =
-        double.tryParse(widget.config.widthController.text.trim()) ?? 0;
-    final double height =
-        double.tryParse(widget.config.heightController.text.trim()) ?? 0;
-    if (width <= 0 || height <= 0) {
-      return const Text('请输入正确的宽高以展示广告视图');
+    final adId = _adId!;
+    Widget adView;
+    switch (widget.adType) {
+      case GromoreAdType.banner:
+        adView = GromoreBannerView(adId: adId);
+        break;
+      case GromoreAdType.native:
+        adView = GromoreFeedView(adId: adId);
+        break;
+      case GromoreAdType.drawNative:
+        adView = GromoreDrawView(adId: adId);
+        break;
+      default:
+        return const SizedBox.shrink();
     }
     return Column(
+      key: ValueKey('embedded:$adId'),
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 16),
         const Text('广告视图预览', style: TextStyle(fontWeight: FontWeight.bold)),
         const SizedBox(height: 8),
-        Container(
-          width: width,
-          height: height,
+        DecoratedBox(
           decoration: BoxDecoration(
             border: Border.all(color: Colors.grey.shade400),
           ),
-          child: GromoreAdView(
-            adId: _adId!,
-            adType: widget.adType,
-            width: width,
-            height: height,
-          ),
+          key: ValueKey(adId),
+          child: adView,
         ),
       ],
     );
@@ -1149,12 +1150,12 @@ class _AdPageState extends State<AdPage> {
         if (widget.showSize) ...[
           TextField(
             controller: widget.config.widthController,
-            decoration: const InputDecoration(labelText: '宽度 (dp)'),
+            decoration: const InputDecoration(labelText: '宽度 (逻辑像素)'),
             keyboardType: TextInputType.number,
           ),
           TextField(
             controller: widget.config.heightController,
-            decoration: const InputDecoration(labelText: '高度 (dp)'),
+            decoration: const InputDecoration(labelText: '高度 (逻辑像素)'),
             keyboardType: TextInputType.number,
           ),
         ],
@@ -1168,15 +1169,38 @@ class _AdPageState extends State<AdPage> {
                 minimumSize: const Size(88, 40),
               ),
               onPressed: _isShowing || _isLoading ? null : _showAd,
-              child: Text(_isShowing || _isLoading ? '加载中...' : '展示'),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_isLoading) ...[
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        semanticsLabel: '正在加载广告',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Text(_isLoading ? '加载中...' : (_isShowing ? '展示中' : '展示')),
+                ],
+              ),
             ),
             const SizedBox(width: 12),
             OutlinedButton(
-              onPressed: _disposeAd,
+              onPressed: _adId == null && !_isLoading ? null : _disposeAd,
               child: const Text('销毁'),
             ),
           ],
         ),
+        if (_isLoading) ...[
+          const SizedBox(height: 12),
+          const Text(
+            '正在准备广告，请稍候…',
+            style: TextStyle(color: Colors.black54),
+          ),
+        ],
         const SizedBox(height: 12),
         Text('当前 adId: ${_adId ?? '-'}'),
         _buildEmbeddedAdView(),
@@ -1221,53 +1245,32 @@ class LogPage extends StatelessWidget {
     );
   }
 
-  Future<void> _showLogFileContent(BuildContext context) async {
-    final String content = await GromoreFlutter.instance.readLogFileContent();
-    if (!context.mounted) {
-      return;
-    }
-    await showDialog<void>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('文件日志内容'),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: SingleChildScrollView(
-              child: SelectableText(content.isEmpty ? '暂无文件日志内容' : content),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('关闭'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Future<void> _showLogFilePath(BuildContext context) async {
-    final String? path = await GromoreFlutter.instance.getLogFilePath();
-    if (!context.mounted) {
-      return;
-    }
-    final String message = path == null ? '当前没有日志文件' : '日志文件路径：$path';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-
   Future<void> _exportLogs(BuildContext context) async {
-    final String? path = await GromoreFlutter.instance.exportLogFile();
-    if (!context.mounted) {
-      return;
+    // iPad 分享面板必须提供有效的弹出锚点。
+    final renderBox = context.findRenderObject() as RenderBox?;
+    final origin = renderBox != null && renderBox.hasSize
+        ? renderBox.localToGlobal(Offset.zero) & renderBox.size
+        : null;
+    try {
+      final path = await GromoreFlutter.instance.exportLogFile();
+      if (!context.mounted) return;
+      if (path == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('暂无可导出的日志文件')),
+        );
+        return;
+      }
+      await Share.shareXFiles(
+        [XFile(path, mimeType: 'text/plain')],
+        subject: 'GroMore 广告日志',
+        sharePositionOrigin: origin,
+      );
+    } catch (error) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('日志导出失败：$error')),
+      );
     }
-    final String message = path == null ? '暂无可导出的日志文件' : '日志已导出：$path';
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
   }
 
   Future<void> _deleteLogFile(BuildContext context) async {
@@ -1288,43 +1291,60 @@ class LogPage extends StatelessWidget {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('日志', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
               Align(
-                alignment: Alignment.centerRight,
-                child: Wrap(
-                  spacing: 4,
-                  runSpacing: 4,
-                  children: [
-                    TextButton(
-                      onPressed: () => _showLogFilePath(context),
-                      child: const Text('路径'),
+                alignment: Alignment.centerLeft,
+                child: ChipTheme(
+                  data: ChipTheme.of(context).copyWith(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 6),
+                    labelStyle: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
-                    TextButton(
-                      onPressed: () => _showLogFileContent(context),
-                      child: const Text('文件内容'),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
                     ),
-                    TextButton(
-                      onPressed: () => _exportLogs(context),
-                      child: const Text('导出'),
+                    side: BorderSide(
+                      color: Theme.of(context).colorScheme.outlineVariant,
                     ),
-                    TextButton(
-                      onPressed: () => _deleteLogFile(context),
-                      child: const Text('删除文件'),
-                    ),
-                    TextButton(
-                      onPressed: () => _copyLogs(context),
-                      child: const Text('复制全部'),
-                    ),
-                    TextButton(
-                      onPressed: logStore.clear,
-                      child: const Text('清空'),
-                    ),
-                  ],
+                  ),
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      Builder(
+                        builder: (buttonContext) => ActionChip(
+                          visualDensity: VisualDensity.compact,
+                          materialTapTargetSize:
+                              MaterialTapTargetSize.shrinkWrap,
+                          onPressed: () => _exportLogs(buttonContext),
+                          label: const Text('导出'),
+                        ),
+                      ),
+                      ActionChip(
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onPressed: () => _deleteLogFile(context),
+                        label: const Text('删除文件'),
+                      ),
+                      ActionChip(
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onPressed: () => _copyLogs(context),
+                        label: const Text('复制全部'),
+                      ),
+                      ActionChip(
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        onPressed: logStore.clear,
+                        label: const Text('清空'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ],

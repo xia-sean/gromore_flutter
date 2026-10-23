@@ -1,4 +1,5 @@
 import 'ad_types.dart';
+import 'ad_info.dart';
 
 /// 广告事件类型枚举
 enum GromoreAdEventType {
@@ -37,6 +38,36 @@ enum GromoreAdEventType {
 
   /// 激励触发
   rewarded,
+
+  /// SDK 视频缓存完成，支持范围取决于平台及广告来源。
+  cached,
+
+  /// 用户选择不感兴趣，原因等信息保留在 data。
+  dislike,
+
+  /// Feed/Draw 视频状态变化；data.state 的类型和枚举取决于平台。
+  videoStateChanged,
+
+  /// Android 默认自渲染广告下载状态，data 含状态和可用进度。
+  downloadChanged,
+
+  /// iOS SDK 通知打开落地页/全屏内容。
+  landingPageOpened,
+
+  /// iOS SDK 通知关闭落地页/其他控制器。
+  landingPageClosed,
+
+  /// SDK 摇一摇交互通知。
+  shake,
+
+  /// iOS Feed/Draw 奖励倒计时，data.countDown 为 SDK 返回值。
+  rewardCountdown,
+
+  /// Android SDK 原始交互事件，data.code/parameters 保留原始信息。
+  nativeEvent,
+
+  /// 开屏卡片可展示；需保留广告实例后调用 showSplashCard。
+  splashCardReady,
 }
 
 /// 广告事件类型值转换
@@ -44,6 +75,27 @@ extension GromoreAdEventTypeValue on GromoreAdEventType {
   /// 获取用于通道传输的字符串值
   String get value {
     switch (this) {
+      case GromoreAdEventType.cached:
+        return 'cached';
+      case GromoreAdEventType.dislike:
+        return 'dislike';
+      case GromoreAdEventType.videoStateChanged:
+        return 'videoStateChanged';
+      case GromoreAdEventType.downloadChanged:
+        return 'downloadChanged';
+      case GromoreAdEventType.landingPageOpened:
+        return 'landingPageOpened';
+      case GromoreAdEventType.landingPageClosed:
+        return 'landingPageClosed';
+      case GromoreAdEventType.shake:
+        return 'shake';
+      case GromoreAdEventType.rewardCountdown:
+        return 'rewardCountdown';
+      case GromoreAdEventType.nativeEvent:
+        return 'nativeEvent';
+      case GromoreAdEventType.splashCardReady:
+        return 'splashCardReady';
+
       case GromoreAdEventType.loaded:
         return 'loaded';
       case GromoreAdEventType.rendered:
@@ -76,6 +128,27 @@ extension GromoreAdEventTypeValue on GromoreAdEventType {
   /// [value] 通道传输的字符串
   static GromoreAdEventType? fromValue(String? value) {
     switch (value) {
+      case 'cached':
+        return GromoreAdEventType.cached;
+      case 'dislike':
+        return GromoreAdEventType.dislike;
+      case 'videoStateChanged':
+        return GromoreAdEventType.videoStateChanged;
+      case 'downloadChanged':
+        return GromoreAdEventType.downloadChanged;
+      case 'landingPageOpened':
+        return GromoreAdEventType.landingPageOpened;
+      case 'landingPageClosed':
+        return GromoreAdEventType.landingPageClosed;
+      case 'shake':
+        return GromoreAdEventType.shake;
+      case 'rewardCountdown':
+        return GromoreAdEventType.rewardCountdown;
+      case 'nativeEvent':
+        return GromoreAdEventType.nativeEvent;
+      case 'splashCardReady':
+        return GromoreAdEventType.splashCardReady;
+
       case 'loaded':
       case 'onAdLoaded':
         return GromoreAdEventType.loaded;
@@ -158,6 +231,11 @@ class GromoreAdEvent {
   /// 额外数据（可选）
   final Map<String, dynamic>? data;
 
+  /// 此次事件携带的 eCPM 信息；SDK 未提供时为 null。
+  GromoreEcpmInfo? get ecpmInfo => data?['ecpmInfo'] is Map
+      ? GromoreEcpmInfo(data!['ecpmInfo'] as Map)
+      : null;
+
   /// 从通道 Map 解析为事件对象
   ///
   /// [map] 通道回传的事件数据
@@ -237,6 +315,9 @@ class GromoreAdErrorEvent extends GromoreAdEvent {
           data: data,
         );
 
+  /// 错误阶段（如 load/show）；旧回调或 SDK 未提供时为 null。
+  String? get phase => data?['phase']?.toString();
+
   /// 解析错误码为 int
   int? get errorCodeInt => int.tryParse(errorCode ?? '');
 
@@ -271,11 +352,22 @@ class GromoreAdRewardEvent extends GromoreAdEvent {
   /// 奖励类型
   final int? rewardType;
 
-  /// 自定义数据
+  /// SDK 在客户端回调中返回的自定义字符串，未返回时为 null。
+  /// 请求传 Map 时自动编码为 JSON；客户端是否回传由广告来源决定。
   final String? customData;
 
   /// 用户 ID
   final String? userId;
+
+  /// SDK 奖励交易 ID，缺失时为 null；实际发奖仍需服务端验签和去重。
+  final String? tradeId;
+
+  /// 提供奖励回调的广告来源名称，SDK 未提供时为 null。
+  final String? adnName;
+
+  /// SDK 是否标记为 GroMore 服务端验证通道；未提供时为 null。
+  /// 该客户端字段不能替代服务器对回调的验证。
+  final bool? verifyByGroMoreS2S;
 
   /// 构建奖励事件
   GromoreAdRewardEvent({
@@ -293,6 +385,9 @@ class GromoreAdRewardEvent extends GromoreAdEvent {
     this.rewardType,
     this.customData,
     this.userId,
+    this.tradeId,
+    this.adnName,
+    this.verifyByGroMoreS2S,
   }) : super(
           adId: adId,
           adType: adType,
@@ -309,14 +404,33 @@ class GromoreAdRewardEvent extends GromoreAdEvent {
     required GromoreAdType adType,
     required GromoreAdEventType eventType,
   }) {
-    final String? rewardName = map['rewardName']?.toString();
-    final int? rewardAmount = _parseInt(map['rewardAmount']);
-    final bool? rewardVerify =
-        _parseBool(map['rewardVerify']) ?? _parseBool(map['isRewardValid']);
-    final int? rewardType = _parseInt(map['rewardType']);
-    final String? rewardId = map['rewardId']?.toString();
-    final String? customData = map['customData']?.toString();
-    final String? userId = map['userId']?.toString();
+    final data = map['data'] as Map?;
+    final fields = <dynamic, dynamic>{
+      ...?data?['extraInfo'] as Map?,
+      ...?data,
+      ...map,
+    };
+    dynamic field(List<String> keys) {
+      for (final key in keys) {
+        if (fields[key] != null) return fields[key];
+      }
+      return null;
+    }
+
+    final rewardName = field(['rewardName', 'reward_name'])?.toString();
+    final rewardAmount = _parseInt(field(['rewardAmount', 'reward_amount']));
+    final rewardVerify = _parseBool(field([
+      'rewardVerify',
+      'isRewardValid',
+      'verify',
+      'reward_valid',
+      'reward_verify'
+    ]));
+    final rewardType = _parseInt(field(['rewardType', 'reward_type']));
+    final rewardId = field(['rewardId', 'reward_id'])?.toString();
+    final customData =
+        field(['customData', 'extra', 'reward_custom_data'])?.toString();
+    final userId = field(['userId', 'user_id'])?.toString();
     return GromoreAdRewardEvent(
       adId: map['adId']?.toString() ?? '',
       adType: adType,
@@ -333,6 +447,11 @@ class GromoreAdRewardEvent extends GromoreAdEvent {
       rewardType: rewardType,
       customData: customData,
       userId: userId,
+      tradeId:
+          field(['tradeId', 'transId', 'trans_id', 'trade_id'])?.toString(),
+      adnName: field(['adnName', 'adn_name'])?.toString(),
+      verifyByGroMoreS2S: _parseBool(
+          field(['verifyByGroMoreS2S', 'isGroMoreServerSideVerify'])),
     );
   }
 
@@ -341,15 +460,13 @@ class GromoreAdRewardEvent extends GromoreAdEvent {
     if (event is GromoreAdRewardEvent) {
       return event;
     }
-    return GromoreAdRewardEvent(
-      adId: event.adId,
-      adType: event.adType,
-      eventType: event.eventType,
-      placementId: event.placementId,
-      errorCode: event.errorCode,
-      errorMessage: event.errorMessage,
-      data: event.data,
-    );
+    return GromoreAdRewardEvent.fromMap({
+      'adId': event.adId,
+      'placementId': event.placementId,
+      'errorCode': event.errorCode,
+      'errorMessage': event.errorMessage,
+      'data': event.data,
+    }, adType: event.adType, eventType: event.eventType);
   }
 }
 

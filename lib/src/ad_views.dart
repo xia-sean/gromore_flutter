@@ -10,8 +10,8 @@ class GromoreBannerView extends StatelessWidget {
   const GromoreBannerView({
     Key? key,
     required this.adId,
-    required this.width,
-    required this.height,
+    this.width,
+    this.height,
     this.enableVisibility = true,
     this.onVisibilityChanged,
     this.onViewCreated,
@@ -20,11 +20,13 @@ class GromoreBannerView extends StatelessWidget {
   /// 广告实例 ID
   final String adId;
 
-  /// 视图宽度
-  final double width;
+  /// 视图宽度（Flutter 逻辑像素）；未填时复用加载 Config 的宽度。
+  /// 显式传值仅覆盖容器，不会重新请求广告。
+  final double? width;
 
-  /// 视图高度
-  final double height;
+  /// 视图高度（Flutter 逻辑像素）；未填时复用加载 Config 的高度。
+  /// Config 也未填时，需在 View 补齐。
+  final double? height;
 
   /// 是否开启可见性/遮挡检测
   final bool enableVisibility;
@@ -54,9 +56,10 @@ class GromoreFeedView extends StatelessWidget {
   const GromoreFeedView({
     Key? key,
     required this.adId,
-    required this.width,
-    required this.height,
+    this.width,
+    this.height,
     this.enableVisibility = true,
+    this.autoManageVideo = true,
     this.onVisibilityChanged,
     this.onViewCreated,
   }) : super(key: key);
@@ -64,14 +67,19 @@ class GromoreFeedView extends StatelessWidget {
   /// 广告实例 ID
   final String adId;
 
-  /// 视图宽度
-  final double width;
+  /// 视图宽度（Flutter 逻辑像素）；未填时复用加载 Config 的宽度。
+  /// 显式传值仅覆盖容器，不会重新请求广告。
+  final double? width;
 
-  /// 视图高度
-  final double height;
+  /// 视图高度（Flutter 逻辑像素）；未填时复用加载 Config 的高度。
+  /// Config 也未填时，需在 View 补齐。
+  final double? height;
 
   /// 是否开启可见性/遮挡检测
   final bool enableVisibility;
+
+  /// 是否随可见性和应用生命周期管理视频；手动控制时设为 false。
+  final bool autoManageVideo;
 
   /// 可见性变化回调
   final GromoreAdVisibilityChanged? onVisibilityChanged;
@@ -87,6 +95,7 @@ class GromoreFeedView extends StatelessWidget {
       width: width,
       height: height,
       enableVisibility: enableVisibility,
+      autoManageVideo: autoManageVideo,
       onVisibilityChanged: onVisibilityChanged,
       onViewCreated: onViewCreated,
     );
@@ -98,9 +107,10 @@ class GromoreDrawView extends StatelessWidget {
   const GromoreDrawView({
     Key? key,
     required this.adId,
-    required this.width,
-    required this.height,
+    this.width,
+    this.height,
     this.enableVisibility = true,
+    this.autoManageVideo = true,
     this.onVisibilityChanged,
     this.onViewCreated,
   }) : super(key: key);
@@ -108,14 +118,19 @@ class GromoreDrawView extends StatelessWidget {
   /// 广告实例 ID
   final String adId;
 
-  /// 视图宽度
-  final double width;
+  /// 视图宽度（Flutter 逻辑像素）；未填时复用加载 Config 的宽度。
+  /// 显式传值仅覆盖容器，不会重新请求广告。
+  final double? width;
 
-  /// 视图高度
-  final double height;
+  /// 视图高度（Flutter 逻辑像素）；未填时复用加载 Config 的高度。
+  /// Config 也未填时，需在 View 补齐。
+  final double? height;
 
   /// 是否开启可见性/遮挡检测
   final bool enableVisibility;
+
+  /// 是否随可见性和应用生命周期管理视频；手动控制时设为 false。
+  final bool autoManageVideo;
 
   /// 可见性变化回调
   final GromoreAdVisibilityChanged? onVisibilityChanged;
@@ -131,6 +146,7 @@ class GromoreDrawView extends StatelessWidget {
       width: width,
       height: height,
       enableVisibility: enableVisibility,
+      autoManageVideo: autoManageVideo,
       onVisibilityChanged: onVisibilityChanged,
       onViewCreated: onViewCreated,
     );

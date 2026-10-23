@@ -34,6 +34,10 @@ import com.bytedance.sdk.openadsdk.mediation.ad.MediationViewBinder
 import com.bytedance.sdk.openadsdk.mediation.ad.MediationExpressRenderListener
 import com.bytedance.sdk.openadsdk.mediation.ad.IMediationNativeAdInfo
 import com.bytedance.sdk.openadsdk.mediation.manager.MediationAdEcpmInfo
+import com.bytedance.sdk.openadsdk.mediation.manager.MediationBaseManager
+import com.bytedance.sdk.openadsdk.TTClientBidding
+import com.bytedance.sdk.openadsdk.TTAdInteractionListener
+import com.bytedance.sdk.openadsdk.mediation.MediationConstant
 import java.net.URL
 import java.util.UUID
 
@@ -46,18 +50,127 @@ internal class GromoreAdManager(
   private val appContext: Context,
   private val activityProvider: () -> Activity?,
   private val emitAdEvent: (Map<String, Any?>) -> Unit,
-  private val emitLog: (String, String, String) -> Unit
-) {
-  /** 主线程 Handler */
-  private val mainHandler = Handler(Looper.getMainLooper())
-
-  /** 广告实例缓存 */
+  private val emitLog: (String, String, String) -> Unit,
+  private val mainHandler: Handler = Handler(Looper.getMainLooper()),
   private val adHolders: MutableMap<String, GromoreAdHolder> = mutableMapOf()
-
+) {
   /**
    * 生成新的广告实例 ID
    */
   fun newAdId(): String = UUID.randomUUID().toString()
+
+  private fun failShow(holder: GromoreAdHolder, code: String, message: String): Nothing {
+    emitAdError(holder.adId, holder.adType, holder.placementId, code, message, "show")
+    throw GromoreAdException(code, message)
+  }
+
+  private fun GromoreAdHolder.manager(): MediationBaseManager? = when (this) {
+    is SplashAdHolder -> ad?.mediationManager
+    is RewardAdHolder -> ad?.mediationManager
+    is FullScreenAdHolder -> ad?.mediationManager
+    is BannerAdHolder -> ad?.mediationManager
+    is FeedAdHolder -> ad?.mediationManager
+    is DrawAdHolder -> ad?.mediationManager
+  }
+
+  private fun GromoreAdHolder.isReady() = !disposed && manager()?.isReady == true
+
+  fun operation(method: String, args: Map<*, *>): Any? {
+    val id = args["adId"] as? String ?: throw GromoreAdException("invalid_args", "adId is required")
+    val holder = adHolders[id] ?: throw GromoreAdException("ad_not_found", "Unknown adId: $id")
+    val manager = holder.manager()
+    return when (method) {
+      "getAdIds" -> holder.batchIds.filter { adHolders.containsKey(it) }
+      "getAdState" -> mapOf("isReady" to holder.isReady(), "isLoading" to holder.loading)
+      "getAdDiagnostics" -> mapOf(
+        "loadInfo" to manager?.adLoadInfo?.map {
+          mapOf("mediationRit" to it.mediationRit, "adnName" to it.adnName,
+            "adType" to it.adType, "errCode" to it.errCode, "errMsg" to it.errMsg)
+        },
+        "bestEcpm" to ecpmMap(manager?.bestEcpm),
+        "showEcpm" to ecpmMap(manager?.showEcpm),
+        "multiBiddingEcpm" to manager?.multiBiddingEcpm?.map { ecpmMap(it) },
+        "cacheList" to manager?.cacheList?.map { ecpmMap(it) }
+      )
+      "controlVideo" -> {
+        if (holder !is FeedAdHolder && holder !is DrawAdHolder)
+          throw GromoreAdException("unsupported", "Video control requires Feed/Draw")
+        when (args["action"]) {
+          "play", "resume" -> { holder.videoPaused = false }
+          "pause" -> { holder.videoPaused = true }
+          else -> throw GromoreAdException("unsupported", "Android mediation supports pause/resume only")
+        }
+        syncVideo(holder)
+        null
+      }
+      "hideSplashSkipButton" -> {
+        val ad = (holder as? SplashAdHolder)?.ad
+          ?: throw GromoreAdException("unsupported", "Requires a loaded splash ad")
+        ad.hideSkipButton()
+        null
+      }
+      "showSplashCard" -> {
+        val ad = (holder as? SplashAdHolder)?.ad
+          ?: throw GromoreAdException("unsupported", "Requires a loaded splash ad")
+        val activity = activityProvider() ?: throw GromoreAdException("no_activity", "Activity is null")
+        if (ad.splashCardView == null) throw GromoreAdException("not_ready", "Splash card is unavailable")
+        val container = FrameLayout(activity)
+        (activity.window.decorView as ViewGroup).addView(container,
+          ViewGroup.LayoutParams(-1, -1))
+        holder.container = container
+        ad.showSplashCardView(container, activity)
+        null
+      }
+      else -> throw GromoreAdException("not_implemented", method)
+    }
+  }
+
+  private fun emitExtra(holder: GromoreAdHolder, event: String, data: Map<String, Any?> = emptyMap()) {
+    if (holder.disposed) return
+    postAdEvent(mapOf("adId" to holder.adId, "adType" to holder.adType,
+      "placementId" to holder.placementId, "eventType" to event, "data" to data))
+  }
+
+  private fun emitCached(holder: GromoreAdHolder) {
+    if (holder.cachedEventSent || holder.disposed) return
+    holder.cachedEventSent = true
+    emitExtra(holder, "cached")
+  }
+
+  private fun bindNativeEvents(holder: GromoreAdHolder, ad: TTClientBidding) {
+    ad.setAdInteractionListener(object : TTAdInteractionListener {
+      override fun onAdEvent(code: Int, data: MutableMap<Any?, Any?>?) {
+        if (holder.disposed) return
+        emitExtra(holder, "nativeEvent", mapOf("code" to code, "parameters" to codecValue(data)))
+      }
+    })
+  }
+
+  private fun bindVideoEvents(holder: GromoreAdHolder, ad: TTFeedAd) {
+    ad.mediationManager.setShakeViewListener { emitExtra(holder, "shake", mapOf("state" to "dismissed")) }
+    ad.setVideoAdListener(object : TTFeedAd.VideoAdListener {
+      override fun onVideoLoad(ad: TTFeedAd?) = emitCached(holder)
+      override fun onVideoError(code: Int, extra: Int) {
+        if (!holder.disposed) emitAdError(holder.adId, holder.adType, holder.placementId, "video_error", "$code/$extra")
+      }
+      override fun onVideoAdStartPlay(ad: TTFeedAd?) = emitExtra(holder, "videoStateChanged", mapOf("state" to "playing"))
+      override fun onVideoAdPaused(ad: TTFeedAd?) = emitExtra(holder, "videoStateChanged", mapOf("state" to "paused"))
+      override fun onVideoAdContinuePlay(ad: TTFeedAd?) = emitExtra(holder, "videoStateChanged", mapOf("state" to "playing"))
+      override fun onProgressUpdate(position: Long, duration: Long) = Unit
+      override fun onVideoAdComplete(ad: TTFeedAd?) = emitAdCompleted(holder)
+    })
+  }
+
+  private fun codecValue(value: Any?): Any? = when (value) {
+    null, is String, is Boolean, is Int, is Long, is Double, is Float,
+    is ByteArray, is IntArray, is LongArray, is DoubleArray -> value
+    is Number -> value.toDouble()
+    is Bundle -> bundleToMap(value)
+    is Map<*, *> -> value.entries.associate { it.key.toString() to codecValue(it.value) }
+    is Iterable<*> -> value.map { codecValue(it) }
+    is Array<*> -> value.map { codecValue(it) }
+    else -> value.toString()
+  }
 
   /**
    * 加载广告
@@ -78,6 +191,12 @@ internal class GromoreAdManager(
       emitAdError(adId, adType, placementId, "no_activity", "Activity is null.")
       return
     }
+    val factoryId = GromoreAdRequestOptions(requestMap).string("nativeRenderFactoryId")
+    if (factoryId != null && when (adType) {
+        "banner" -> GromoreNativeRenderRegistry.bannerFactory(factoryId) == null
+        "native", "draw_native" -> GromoreNativeRenderRegistry.factory(factoryId) == null
+        else -> true
+      }) throw GromoreAdException("factory_not_found", "No native factory for $adType: $factoryId")
     emitLog("info", "loadAd start: $adType, placementId=$placementId, adId=$adId", "ad")
     when (adType) {
       "splash" -> loadSplashAd(activity, adId, placementId, requestMap)
@@ -99,9 +218,10 @@ internal class GromoreAdManager(
   fun showAd(adId: String) {
     val holder = adHolders[adId]
     if (holder == null) {
-      emitLog("error", "showAd failed: adId not found: $adId", "ad")
-      return
+      throw GromoreAdException("ad_not_found", "Unknown adId: $adId")
     }
+    if (activityProvider() == null) failShow(holder, "no_activity", "Activity is null")
+    if (!holder.isReady()) failShow(holder, "not_ready", "Ad is not ready")
     when (holder) {
       is SplashAdHolder -> showSplashAd(holder)
       is RewardAdHolder -> showRewardAd(holder)
@@ -121,7 +241,11 @@ internal class GromoreAdManager(
     val holder = adHolders.remove(adId) ?: return
     holder.disposed = true
     when (holder) {
-      is SplashAdHolder -> holder.ad?.mediationManager?.destroy()
+      is SplashAdHolder -> {
+        holder.ad?.mediationManager?.destroy()
+        holder.container?.let { (it.parent as? ViewGroup)?.removeView(it) }
+        holder.logo = null
+      }
       is RewardAdHolder -> holder.ad?.mediationManager?.destroy()
       is FullScreenAdHolder -> holder.ad?.mediationManager?.destroy()
       is BannerAdHolder -> holder.ad?.destroy()
@@ -162,6 +286,7 @@ internal class GromoreAdManager(
       is DrawAdHolder -> attachDrawView(holder)
       else -> emitLog("warn", "attachAdView unsupported for adType=$adType", "ad")
     }
+    syncVideo(holder)
   }
 
   /**
@@ -173,6 +298,18 @@ internal class GromoreAdManager(
     val holder = adHolders[adId] ?: return
     holder.container?.removeAllViews()
     holder.container = null
+    syncVideo(holder)
+  }
+
+  /** 解绑只临时暂停，不覆盖手动暂停；未绑定时的 resume 延后至重新挂载。 */
+  private fun syncVideo(holder: GromoreAdHolder) {
+    val manager = when (holder) {
+      is FeedAdHolder -> holder.ad?.mediationManager
+      is DrawAdHolder -> holder.ad?.mediationManager
+      else -> null
+    } ?: return
+    if (holder.videoPaused || holder.container == null) manager.onPause()
+    else manager.onResume()
   }
 
   /** 加载开屏广告 */
@@ -182,12 +319,10 @@ internal class GromoreAdManager(
     placementId: String,
     requestMap: Map<*, *>
   ) {
-    val width = readInt(requestMap, "width", activity.resources.displayMetrics.widthPixels)
-    val height = readInt(requestMap, "height", activity.resources.displayMetrics.heightPixels)
+    val width = GromoreAdRequestOptions(requestMap).dimensionPx("width", activity.resources.displayMetrics.density, activity.resources.displayMetrics.widthPixels)
+    val height = GromoreAdRequestOptions(requestMap).dimensionPx("height", activity.resources.displayMetrics.density, activity.resources.displayMetrics.heightPixels)
     val timeout = readInt(requestMap, "splashTimeout", 3500)
-    if (GromoreAdRequestOptions(requestMap).string("logo") != null) {
-      emitLog("warn", "splash logo is not supported; the logo parameter is ignored", "ad")
-    }
+
 
     val adSlot = AdSlot.Builder()
       .setCodeId(placementId)
@@ -197,16 +332,39 @@ internal class GromoreAdManager(
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
     val holder = SplashAdHolder(adId, placementId)
+    val options = GromoreAdRequestOptions(requestMap)
+    options.string("logo")?.let { path ->
+      holder.logo = BitmapFactory.decodeFile(path)
+        ?: throw GromoreAdException("invalid_args", "Cannot decode splash logo: $path")
+      holder.logoHeight = options.int("logoHeight", 80).coerceAtLeast(1)
+    }
+    holder.factoryId = GromoreAdRequestOptions(requestMap).string("nativeRenderFactoryId")
     adHolders[adId] = holder
 
     val loadListener = object : TTAdNative.CSJSplashAdListener {
       override fun onSplashLoadSuccess(ad: CSJSplashAd?) {
+        if (holder.disposed) { ad?.mediationManager?.destroy(); return }
+        if (ad == null) {
+          emitAdError(adId, holder.adType, placementId, "empty_ad", "SDK returned no ad")
+          return
+        }
         emitLog("info", "splash load success: $adId", "ad")
         holder.ad = ad
+        bindNativeEvents(holder, ad)
+        ad.setSplashCardListener(object : CSJSplashAd.SplashCardListener {
+          override fun onSplashCardReadyToShow(ad: CSJSplashAd) = emitExtra(holder, "splashCardReady")
+          override fun onSplashCardClick() = emitAdClicked(holder)
+          override fun onSplashCardClose() {
+            if (holder.disposed) return
+            holder.container?.let { (it.parent as? ViewGroup)?.removeView(it) }
+            emitAdClosed(holder, mapOf("closeType" to "card_close"))
+          }
+        })
         emitAdLoaded(holder)
       }
 
       override fun onSplashLoadFail(error: CSJAdError?) {
+        if (holder.disposed) return
         emitLog("error", "splash load fail: $adId, code=${error?.code}, msg=${error?.msg}", "ad")
         emitAdError(
           adId,
@@ -218,11 +376,14 @@ internal class GromoreAdManager(
       }
 
       override fun onSplashRenderSuccess(ad: CSJSplashAd?) {
+        if (holder.disposed) { ad?.mediationManager?.destroy(); return }
         holder.ad = ad
+        emitAdRendered(holder, 0f, 0f)
         emitLog("info", "splash render success: $adId", "ad")
       }
 
       override fun onSplashRenderFail(ad: CSJSplashAd?, error: CSJAdError?) {
+        if (holder.disposed) return
         emitLog("error", "splash render fail: $adId, code=${error?.code}, msg=${error?.msg}", "ad")
         emitAdError(
           adId,
@@ -243,21 +404,23 @@ internal class GromoreAdManager(
     val activity = activityProvider()
     val ad = holder.ad
     if (activity == null || ad == null) {
-      emitLog("error", "showSplashAd failed: missing activity or ad", "ad")
-      return
+      failShow(holder, "not_ready", "Missing activity or ad")
     }
     val splashListener = object : CSJSplashAd.SplashAdListener {
       override fun onSplashAdShow(ad: CSJSplashAd?) {
+        if (holder.disposed) return
         emitLog("info", "splash shown: ${holder.adId}", "ad")
         emitAdShownOnce(holder)
       }
 
       override fun onSplashAdClick(ad: CSJSplashAd?) {
+        if (holder.disposed) return
         emitLog("info", "splash clicked: ${holder.adId}", "ad")
         emitAdClicked(holder)
       }
 
       override fun onSplashAdClose(ad: CSJSplashAd?, closeType: Int) {
+        if (holder.disposed) return
         emitLog("info", "splash closed: ${holder.adId}, closeType=$closeType", "ad")
         holder.container?.let { container ->
           container.removeAllViews()
@@ -283,21 +446,24 @@ internal class GromoreAdManager(
     holder.container = container
     val decorView = activity.window.decorView as? ViewGroup
     if (decorView == null) {
-      emitLog("error", "showSplashAd failed: decor view is null", "ad")
-      return
+      failShow(holder, "no_window", "Decor view is null")
     }
     // 使用 SDK 的 showSplashView，而不是手动把 splashView 加到窗口。
     // 部分聚合广告源（如优量汇）只有在该入口中才会触发展示回调。
     decorView.addView(container)
-    ad.showSplashView(container)
-    // 个别广告源不会转发 CSJSplashAd.SplashAdListener.onSplashAdShow，
-    // 用一次性兜底保证 Flutter 侧仍能收到 onShown；正常回调先到时不会重复。
-    mainHandler.postDelayed({
-      if (!holder.disposed && !holder.shownEventSent && !holder.closeEventSent) {
-        emitLog("warn", "splash show callback missing; emitting fallback shown: ${holder.adId}", "ad")
-        emitAdShownOnce(holder)
-      }
-    }, 500L)
+    val adContainer = FrameLayout(activity)
+    container.addView(adContainer, FrameLayout.LayoutParams(-1, -1).apply {
+      bottomMargin = if (holder.logo != null) holder.logoHeight else 0
+    })
+    holder.logo?.let { logo ->
+      val logoView = ImageView(activity)
+      logoView.setBackgroundColor(Color.WHITE)
+      logoView.setImageBitmap(logo)
+      logoView.scaleType = ImageView.ScaleType.FIT_CENTER
+      container.addView(logoView, FrameLayout.LayoutParams(-1, holder.logoHeight, android.view.Gravity.BOTTOM))
+    }
+    ad.showSplashView(adContainer)
+
   }
 
   /** 加载激励视频广告 */
@@ -311,27 +477,41 @@ internal class GromoreAdManager(
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
     val holder = RewardAdHolder(adId, placementId)
+    val options = GromoreAdRequestOptions(requestMap)
+    holder.rewardData = listOf("userId", "customData", "rewardName", "rewardAmount").associateWith { options.value(it) }
+    holder.factoryId = GromoreAdRequestOptions(requestMap).string("nativeRenderFactoryId")
     adHolders[adId] = holder
 
     val listener = object : TTAdNative.RewardVideoAdListener {
       override fun onError(code: Int, message: String?) {
+        if (holder.disposed) return
         emitLog("error", "reward load fail: $adId, code=$code, msg=$message", "ad")
         emitAdError(adId, holder.adType, placementId, code.toString(), message)
       }
 
       override fun onRewardVideoAdLoad(ad: TTRewardVideoAd?) {
+        if (holder.disposed) { ad?.mediationManager?.destroy(); return }
+        if (ad == null) {
+          emitAdError(adId, holder.adType, placementId, "empty_ad", "SDK returned no ad")
+          return
+        }
         emitLog("info", "reward load success: $adId", "ad")
         holder.ad = ad
+        if (ad != null) bindNativeEvents(holder, ad)
         emitAdLoaded(holder)
       }
 
       override fun onRewardVideoCached() {
+        if (holder.disposed) return
         emitLog("info", "reward cached: $adId", "ad")
+        emitCached(holder)
       }
 
       override fun onRewardVideoCached(ad: TTRewardVideoAd?) {
+        if (holder.disposed) { ad?.mediationManager?.destroy(); return }
         holder.ad = ad
         emitLog("info", "reward cached with ad: $adId", "ad")
+        emitCached(holder)
       }
     }
     holder.loadListener = listener
@@ -343,36 +523,39 @@ internal class GromoreAdManager(
     val activity = activityProvider()
     val ad = holder.ad
     if (activity == null || ad == null) {
-      emitLog("error", "showRewardAd failed: missing activity or ad", "ad")
-      return
+      failShow(holder, "not_ready", "Missing activity or ad")
     }
     if (!ad.mediationManager.isReady) {
-      emitAdError(holder.adId, holder.adType, holder.placementId, "not_ready", "Reward ad is not ready.")
-      return
+      failShow(holder, "not_ready", "Reward ad is not ready")
     }
     val interactionListener = object : TTRewardVideoAd.RewardAdInteractionListener {
       override fun onAdShow() {
+        if (holder.disposed) return
         emitLog("info", "reward shown: ${holder.adId}", "ad")
         emitAdShownOnce(holder)
       }
 
       override fun onAdVideoBarClick() {
+        if (holder.disposed) return
         emitLog("info", "reward clicked: ${holder.adId}", "ad")
         emitAdClicked(holder)
       }
 
       override fun onAdClose() {
+        if (holder.disposed) return
         emitLog("info", "reward closed: ${holder.adId}", "ad")
         emitAdClosed(holder)
       }
 
       override fun onVideoComplete() {
+        if (holder.disposed) return
         emitLog("info", "reward video complete: ${holder.adId}", "ad")
         emitAdCompleted(holder)
       }
 
       override fun onVideoError() {
-        emitLog("error", "reward video error: ${holder.adId}", "ad")
+        if (holder.disposed) return
+        emitAdError(holder.adId, holder.adType, holder.placementId, "video_error", "Reward video playback failed")
       }
 
       override fun onRewardVerify(
@@ -382,17 +565,26 @@ internal class GromoreAdManager(
         errorCode: Int,
         errorMsg: String?
       ) {
+        if (holder.disposed) return
         // deprecated in GroMore，使用 onRewardArrived
       }
 
       override fun onRewardArrived(isRewardValid: Boolean, rewardType: Int, extraInfo: Bundle?) {
+        if (holder.disposed) return
         val data = bundleToMap(extraInfo).toMutableMap()
         data["isRewardValid"] = isRewardValid
         data["rewardType"] = rewardType
+        data["rewardName"] = extraInfo?.get(MediationConstant.REWARD_NAME)
+        data["rewardAmount"] = extraInfo?.get(MediationConstant.REWARD_AMOUNT)
+        data["customData"] = extraInfo?.get(MediationConstant.REWARD_CUSTOM_DATA)
+        data["tradeId"] = extraInfo?.get(MediationConstant.KEY_TRANS_ID)
+        data["adnName"] = extraInfo?.get(MediationConstant.KEY_ADN_NAME)
+        data["verifyByGroMoreS2S"] = extraInfo?.get(MediationConstant.KEY_IS_GROMORE_SERVER_SIDE_VERIFY)
         emitAdRewarded(holder, data)
       }
 
       override fun onSkippedVideo() {
+        if (holder.disposed) return
         emitLog("info", "reward skipped: ${holder.adId}", "ad")
         emitAdSkipped(holder)
       }
@@ -423,27 +615,39 @@ internal class GromoreAdManager(
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
     val holder = FullScreenAdHolder(adId, placementId, adType)
+    holder.factoryId = GromoreAdRequestOptions(requestMap).string("nativeRenderFactoryId")
     adHolders[adId] = holder
 
     val listener = object : TTAdNative.FullScreenVideoAdListener {
       override fun onError(code: Int, message: String?) {
+        if (holder.disposed) return
         emitLog("error", "fullscreen load fail: $adId, code=$code, msg=$message", "ad")
         emitAdError(adId, holder.adType, placementId, code.toString(), message)
       }
 
       override fun onFullScreenVideoAdLoad(ad: TTFullScreenVideoAd?) {
+        if (holder.disposed) { ad?.mediationManager?.destroy(); return }
+        if (ad == null) {
+          emitAdError(adId, holder.adType, placementId, "empty_ad", "SDK returned no ad")
+          return
+        }
         emitLog("info", "fullscreen load success: $adId", "ad")
         holder.ad = ad
+        if (ad != null) bindNativeEvents(holder, ad)
         emitAdLoaded(holder)
       }
 
       override fun onFullScreenVideoCached() {
+        if (holder.disposed) return
         emitLog("info", "fullscreen cached: $adId", "ad")
+        emitCached(holder)
       }
 
       override fun onFullScreenVideoCached(ad: TTFullScreenVideoAd?) {
+        if (holder.disposed) { ad?.mediationManager?.destroy(); return }
         holder.ad = ad
         emitLog("info", "fullscreen cached with ad: $adId", "ad")
+        emitCached(holder)
       }
     }
     holder.loadListener = listener
@@ -455,35 +659,38 @@ internal class GromoreAdManager(
     val activity = activityProvider()
     val ad = holder.ad
     if (activity == null || ad == null) {
-      emitLog("error", "showFullScreenAd failed: missing activity or ad", "ad")
-      return
+      failShow(holder, "not_ready", "Missing activity or ad")
     }
     if (!ad.mediationManager.isReady) {
-      emitAdError(holder.adId, holder.adType, holder.placementId, "not_ready", "FullScreen ad is not ready.")
-      return
+      failShow(holder, "not_ready", "Fullscreen ad is not ready")
     }
     val interactionListener = object : TTFullScreenVideoAd.FullScreenVideoAdInteractionListener {
       override fun onAdShow() {
+        if (holder.disposed) return
         emitLog("info", "fullscreen shown: ${holder.adId}", "ad")
         emitAdShownOnce(holder)
       }
 
       override fun onAdVideoBarClick() {
+        if (holder.disposed) return
         emitLog("info", "fullscreen clicked: ${holder.adId}", "ad")
         emitAdClicked(holder)
       }
 
       override fun onAdClose() {
+        if (holder.disposed) return
         emitLog("info", "fullscreen closed: ${holder.adId}", "ad")
         emitAdClosed(holder)
       }
 
       override fun onVideoComplete() {
+        if (holder.disposed) return
         emitLog("info", "fullscreen video complete: ${holder.adId}", "ad")
         emitAdCompleted(holder)
       }
 
       override fun onSkippedVideo() {
+        if (holder.disposed) return
         emitLog("info", "fullscreen skipped: ${holder.adId}", "ad")
         emitAdSkipped(holder)
       }
@@ -500,37 +707,70 @@ internal class GromoreAdManager(
     placementId: String,
     requestMap: Map<*, *>
   ) {
-    val width = readInt(requestMap, "width", dpToPx(activity, 320f))
-    val height = readInt(requestMap, "height", dpToPx(activity, 150f))
+    val width = GromoreAdRequestOptions(requestMap).dimensionPx("width", activity.resources.displayMetrics.density, dpToPx(activity, 320f))
+    val height = GromoreAdRequestOptions(requestMap).dimensionPx("height", activity.resources.displayMetrics.density, dpToPx(activity, 150f))
     val adSlot = AdSlot.Builder()
       .setCodeId(placementId)
       .setImageAcceptedSize(width, height)
-      .setMediationAdSlot(GromoreAdRequestOptions(requestMap).mediationSlot())
+      .setMediationAdSlot(GromoreAdRequestOptions(requestMap).mediationSlot(bannerListener = bannerRenderer(activity, requestMap)))
       .build()
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
     val holder = BannerAdHolder(adId, placementId)
+    holder.factoryId = GromoreAdRequestOptions(requestMap).string("nativeRenderFactoryId")
     adHolders[adId] = holder
 
     val listener = object : TTAdNative.NativeExpressAdListener {
       override fun onNativeExpressAdLoad(ads: MutableList<TTNativeExpressAd>?) {
+        if (holder.disposed) { ads?.forEach { it.destroy() }; return }
         val ad = ads?.firstOrNull()
         if (ad == null) {
           emitAdError(adId, holder.adType, placementId, "empty_ad", "No banner ad returned.")
           return
         }
+        ads?.drop(1)?.forEach { it.destroy() }
         holder.ad = ad
         emitLog("info", "banner load success: $adId", "ad")
         emitAdLoaded(holder)
+        if (holder.container != null) attachBannerView(holder)
       }
 
       override fun onError(code: Int, message: String?) {
+        if (holder.disposed) return
         emitLog("error", "banner load fail: $adId, code=$code, msg=$message", "ad")
         emitAdError(adId, holder.adType, placementId, code.toString(), message)
       }
     }
     holder.loadListener = listener
     adNative.loadBannerExpressAd(adSlot, listener)
+  }
+
+  private fun bannerRenderer(activity: Activity, request: Map<*, *>): com.bytedance.sdk.openadsdk.mediation.ad.MediationNativeToBannerListener {
+    return object : com.bytedance.sdk.openadsdk.mediation.ad.MediationNativeToBannerListener() {
+      override fun getMediationBannerViewFromNativeAd(ad: IMediationNativeAdInfo): View {
+        val id = GromoreAdRequestOptions(request).string("nativeRenderFactoryId")
+        if (id != null) {
+          val factory = GromoreNativeRenderRegistry.bannerFactory(id)
+            ?: throw GromoreAdException("factory_not_found", "No banner factory: $id")
+          return factory.create(activity, ad)
+        }
+        val root = LayoutInflater.from(activity).inflate(R.layout.gromore_banner_native, null, false) as ViewGroup
+        root.findViewById<TextView>(R.id.gromore_feed_title).text = ad.title
+        root.findViewById<TextView>(R.id.gromore_feed_desc).text = ad.description
+        root.findViewById<TextView>(R.id.gromore_feed_source).text = ad.source
+        val cta = root.findViewById<TextView>(R.id.gromore_feed_cta)
+        cta.text = ad.actionText
+        loadImageInto(ad.iconUrl, root.findViewById(R.id.gromore_feed_icon))
+        loadImageInto(ad.imageUrl, root.findViewById(R.id.gromore_feed_main_image))
+        val binder = MediationViewBinder.Builder(R.layout.gromore_banner_native)
+          .titleId(R.id.gromore_feed_title).descriptionTextId(R.id.gromore_feed_desc)
+          .callToActionId(R.id.gromore_feed_cta).iconImageId(R.id.gromore_feed_icon)
+          .mainImageId(R.id.gromore_feed_main_image).mediaViewIdId(R.id.gromore_feed_media)
+          .sourceId(R.id.gromore_feed_source).logoLayoutId(R.id.gromore_banner_logo).build()
+        ad.registerView(activity, root, listOf(root, cta), listOf(cta), emptyList(), binder)
+        return root
+      }
+    }
   }
 
   /** 绑定 Banner 视图 */
@@ -543,34 +783,42 @@ internal class GromoreAdManager(
     }
     ad.setExpressInteractionListener(object : TTNativeExpressAd.ExpressAdInteractionListener {
       override fun onAdClicked(view: View?, type: Int) {
+        if (holder.disposed) return
         emitAdClicked(holder)
       }
 
       override fun onAdShow(view: View?, type: Int) {
-        emitAdShownOnce(holder)
+        if (holder.disposed) return
+        emitAdShown(holder)
       }
 
       override fun onRenderFail(view: View?, msg: String?, code: Int) {
-        emitAdError(holder.adId, holder.adType, holder.placementId, code.toString(), msg)
+        if (holder.disposed) return
+        emitAdError(holder.adId, holder.adType, holder.placementId, code.toString(), msg, phase = "render")
       }
 
       override fun onRenderSuccess(view: View?, width: Float, height: Float) {
+        if (holder.disposed) return
         emitLog("info", "banner render success: ${holder.adId}, width=$width, height=$height", "ad")
         emitAdRendered(holder, width, height)
       }
     })
     ad.setDislikeCallback(activity, object : TTAdDislike.DislikeInteractionCallback {
       override fun onShow() {
+        if (holder.disposed) return
         emitLog("info", "banner dislike show: ${holder.adId}", "ad")
       }
 
       override fun onSelected(position: Int, value: String?, enforce: Boolean) {
+        if (holder.disposed) return
         emitLog("info", "banner dislike selected: ${holder.adId}", "ad")
+        emitExtra(holder, "dislike", mapOf("reason" to value, "position" to position))
         emitAdClosedOnce(holder, mapOf("dislike" to true, "value" to value))
         holder.container?.removeAllViews()
       }
 
       override fun onCancel() {
+        if (holder.disposed) return
         emitLog("info", "banner dislike cancel: ${holder.adId}", "ad")
       }
     })
@@ -597,15 +845,12 @@ internal class GromoreAdManager(
     placementId: String,
     requestMap: Map<*, *>
   ) {
-    val width = readInt(requestMap, "width", activity.resources.displayMetrics.widthPixels)
-    val height = readInt(requestMap, "height", 720)
+    val width = GromoreAdRequestOptions(requestMap).dimensionPx("width", activity.resources.displayMetrics.density, activity.resources.displayMetrics.widthPixels)
+    val height = GromoreAdRequestOptions(requestMap).dimensionPx("height", activity.resources.displayMetrics.density, 720)
     val requestedAdCount = readInt(requestMap, "adCount", 1)
     val adCount = requestedAdCount.coerceIn(1, 3)
     if (requestedAdCount != adCount) {
       emitLog("warn", "feed adCount out of range, clamped from $requestedAdCount to $adCount", "ad")
-    }
-    if (adCount > 1) {
-      emitLog("info", "feed requested $adCount ads, current Flutter plugin uses the first returned ad only", "ad")
     }
     val adSlot = AdSlot.Builder()
       .setCodeId(placementId)
@@ -616,53 +861,33 @@ internal class GromoreAdManager(
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
     val holder = FeedAdHolder(adId, placementId, adType)
+    holder.factoryId = GromoreAdRequestOptions(requestMap).string("nativeRenderFactoryId")
     adHolders[adId] = holder
 
     val listener = object : TTAdNative.FeedAdListener {
       override fun onError(code: Int, message: String?) {
+        if (holder.disposed) return
         emitLog("error", "feed load fail: $adId, code=$code, msg=$message", "ad")
         emitAdError(adId, holder.adType, placementId, code.toString(), message)
       }
 
       override fun onFeedAdLoad(ads: MutableList<TTFeedAd>?) {
+        if (holder.disposed) { ads?.forEach { it.destroy() }; return }
         val ad = ads?.firstOrNull()
         if (ad == null) {
           emitAdError(adId, holder.adType, placementId, "empty_ad", "No feed ad returned.")
           return
         }
-        holder.ad = ad
-        bindFeedDislikeCallback(activity, holder, ad)
-        emitLog("info", "feed load success: $adId", "ad")
-        emitAdLoaded(holder)
-        if (ad.mediationManager.isExpress) {
-          val renderListener = object : MediationExpressRenderListener {
-            override fun onRenderSuccess(view: View?, width: Float, height: Float, isExpress: Boolean) {
-              holder.renderedView = ad.adView
-              emitLog("info", "feed render success: $adId", "ad")
-              emitFeedRendered(holder, width, height)
-              attachFeedView(holder)
-            }
-
-            override fun onRenderFail(view: View?, msg: String?, code: Int) {
-              emitLog("error", "feed render fail: $adId, code=$code, msg=$msg", "ad")
-              emitAdError(adId, holder.adType, placementId, code.toString(), msg)
-            }
-
-            override fun onAdClick() {
-              emitAdClicked(holder)
-            }
-
-            override fun onAdShow() {
-              emitAdShownOnce(holder)
-            }
-          }
-          holder.renderListener = renderListener
-          ad.setExpressRenderListener(renderListener)
-          ad.render()
-        } else {
-          emitLog("info", "feed native render detected, using built-in native feed view", "ad")
-          attachFeedView(holder)
+        val items = ads ?: return
+        val holders = items.mapIndexed { index, _ ->
+          val target = if (index == 0) holder else FeedAdHolder(newAdId(), placementId, adType)
+          target.factoryId = holder.factoryId
+          adHolders[target.adId] = target
+          target
         }
+        val ids = holders.map { it.adId }
+        holders.forEach { it.batchIds = ids }
+        items.zip(holders).forEach { (item, target) -> prepareFeed(activity, target, item) }
       }
     }
     holder.loadListener = listener
@@ -677,15 +902,12 @@ internal class GromoreAdManager(
     placementId: String,
     requestMap: Map<*, *>
   ) {
-    val width = readInt(requestMap, "width", activity.resources.displayMetrics.widthPixels)
-    val height = readInt(requestMap, "height", activity.resources.displayMetrics.heightPixels)
+    val width = GromoreAdRequestOptions(requestMap).dimensionPx("width", activity.resources.displayMetrics.density, activity.resources.displayMetrics.widthPixels)
+    val height = GromoreAdRequestOptions(requestMap).dimensionPx("height", activity.resources.displayMetrics.density, activity.resources.displayMetrics.heightPixels)
     val requestedAdCount = readInt(requestMap, "adCount", 1)
     val adCount = requestedAdCount.coerceIn(1, 3)
     if (requestedAdCount != adCount) {
       emitLog("warn", "draw adCount out of range, clamped from $requestedAdCount to $adCount", "ad")
-    }
-    if (adCount > 1) {
-      emitLog("info", "draw requested $adCount ads, current Flutter plugin uses the first returned ad only", "ad")
     }
     val adSlot = AdSlot.Builder()
       .setCodeId(placementId)
@@ -696,57 +918,123 @@ internal class GromoreAdManager(
 
     val adNative = TTAdSdk.getAdManager().createAdNative(activity)
     val holder = DrawAdHolder(adId, placementId, adType)
+    holder.factoryId = GromoreAdRequestOptions(requestMap).string("nativeRenderFactoryId")
     adHolders[adId] = holder
 
     val listener = object : TTAdNative.DrawFeedAdListener {
       override fun onError(code: Int, message: String?) {
+        if (holder.disposed) return
         emitLog("error", "draw load fail: $adId, code=$code, msg=$message", "ad")
         emitAdError(adId, holder.adType, placementId, code.toString(), message)
       }
 
       override fun onDrawFeedAdLoad(ads: MutableList<TTDrawFeedAd>?) {
+        if (holder.disposed) { ads?.forEach { it.destroy() }; return }
         val ad = ads?.firstOrNull()
         if (ad == null) {
           emitAdError(adId, holder.adType, placementId, "empty_ad", "No draw ad returned.")
           return
         }
-        holder.ad = ad
-        bindFeedDislikeCallback(activity, holder, ad)
-        emitLog("info", "draw load success: $adId", "ad")
-        emitAdLoaded(holder)
-        if (ad.mediationManager.isExpress) {
-          val renderListener = object : MediationExpressRenderListener {
-            override fun onRenderSuccess(view: View?, width: Float, height: Float, isExpress: Boolean) {
-              holder.renderedView = ad.adView
-              emitLog("info", "draw render success: $adId", "ad")
-              emitDrawRendered(holder, width, height)
-              attachDrawView(holder)
-            }
-
-            override fun onRenderFail(view: View?, msg: String?, code: Int) {
-              emitLog("error", "draw render fail: $adId, code=$code, msg=$msg", "ad")
-              emitAdError(adId, holder.adType, placementId, code.toString(), msg)
-            }
-
-            override fun onAdClick() {
-              emitAdClicked(holder)
-            }
-
-            override fun onAdShow() {
-              emitAdShownOnce(holder)
-            }
-          }
-          holder.renderListener = renderListener
-          ad.setExpressRenderListener(renderListener)
-          ad.render()
-        } else {
-          emitLog("info", "draw native render detected, using built-in native draw view", "ad")
-          attachDrawView(holder)
+        val items = ads ?: return
+        val holders = items.mapIndexed { index, _ ->
+          val target = if (index == 0) holder else DrawAdHolder(newAdId(), placementId, adType)
+          target.factoryId = holder.factoryId
+          adHolders[target.adId] = target
+          target
         }
+        val ids = holders.map { it.adId }
+        holders.forEach { it.batchIds = ids }
+        items.zip(holders).forEach { (item, target) -> prepareDraw(activity, target, item) }
       }
     }
     holder.loadListener = listener
     adNative.loadDrawFeedAd(adSlot, listener)
+  }
+
+  private fun prepareFeed(activity: Activity, holder: FeedAdHolder, ad: TTFeedAd) {
+    holder.ad = ad
+    syncVideo(holder)
+    bindFeedDislikeCallback(activity, holder, ad)
+    emitLog("info", "feed load success: ${holder.adId}", "ad")
+    bindVideoEvents(holder, ad)
+    bindNativeEvents(holder, ad)
+    emitAdLoaded(holder)
+    if (ad.mediationManager.isExpress) {
+      val renderListener = object : MediationExpressRenderListener {
+        override fun onRenderSuccess(view: View?, width: Float, height: Float, isExpress: Boolean) {
+          if (holder.disposed) return
+          holder.renderedView = ad.adView
+          emitLog("info", "feed render success: ${holder.adId}", "ad")
+          emitFeedRendered(holder, width, height)
+          attachFeedView(holder)
+        }
+
+        override fun onRenderFail(view: View?, msg: String?, code: Int) {
+          if (holder.disposed) return
+          emitLog("error", "feed render fail: ${holder.adId}, code=$code, msg=$msg", "ad")
+          emitAdError(holder.adId, holder.adType, holder.placementId, code.toString(), msg, phase = "render")
+        }
+
+        override fun onAdClick() {
+          if (holder.disposed) return
+          emitAdClicked(holder)
+        }
+
+        override fun onAdShow() {
+          if (holder.disposed) return
+          emitAdShownOnce(holder)
+        }
+      }
+      holder.renderListener = renderListener
+      ad.setExpressRenderListener(renderListener)
+      ad.render()
+    } else {
+      emitLog("info", "feed native render detected, using built-in native feed view", "ad")
+      attachFeedView(holder)
+    }
+  }
+
+  private fun prepareDraw(activity: Activity, holder: DrawAdHolder, ad: TTDrawFeedAd) {
+    holder.ad = ad
+    syncVideo(holder)
+    bindFeedDislikeCallback(activity, holder, ad)
+    emitLog("info", "draw load success: ${holder.adId}", "ad")
+    bindVideoEvents(holder, ad)
+    bindNativeEvents(holder, ad)
+    emitAdLoaded(holder)
+    if (ad.mediationManager.isExpress) {
+      val renderListener = object : MediationExpressRenderListener {
+        override fun onRenderSuccess(view: View?, width: Float, height: Float, isExpress: Boolean) {
+          if (holder.disposed) return
+          holder.renderedView = ad.adView
+          emitLog("info", "draw render success: ${holder.adId}", "ad")
+          emitDrawRendered(holder, width, height)
+          attachDrawView(holder)
+        }
+
+        override fun onRenderFail(view: View?, msg: String?, code: Int) {
+          if (holder.disposed) return
+          emitLog("error", "draw render fail: ${holder.adId}, code=$code, msg=$msg", "ad")
+          emitAdError(holder.adId, holder.adType, holder.placementId, code.toString(), msg, phase = "render")
+        }
+
+        override fun onAdClick() {
+          if (holder.disposed) return
+          emitAdClicked(holder)
+        }
+
+        override fun onAdShow() {
+          if (holder.disposed) return
+          emitAdShownOnce(holder)
+        }
+      }
+      holder.renderListener = renderListener
+      ad.setExpressRenderListener(renderListener)
+      ad.render()
+    } else {
+      emitLog("info", "draw native render detected, using built-in native draw view", "ad")
+      attachDrawView(holder)
+    }
   }
 
   /** 绑定信息流视图 */
@@ -760,7 +1048,7 @@ internal class GromoreAdManager(
         emitLog("warn", "attachFeedView failed: missing activity for native render", "ad")
         return
       }
-      holder.renderedView ?: buildNativeFeedView(activity, holder, ad).also {
+      holder.renderedView ?: renderCustom(holder, activity, ad) { buildNativeFeedView(activity, holder, ad) }.also {
         holder.renderedView = it
       }
     }
@@ -774,6 +1062,7 @@ internal class GromoreAdManager(
           ViewGroup.LayoutParams.MATCH_PARENT
         )
       )
+      syncVideo(holder)
       if (!holder.renderEventSent) {
         view.post {
           emitFeedRendered(holder, view.width.toFloat(), view.height.toFloat())
@@ -793,7 +1082,7 @@ internal class GromoreAdManager(
         emitLog("warn", "attachDrawView failed: missing activity for native render", "ad")
         return
       }
-      holder.renderedView ?: buildNativeDrawView(activity, holder, ad).also {
+      holder.renderedView ?: renderCustom(holder, activity, ad) { buildNativeDrawView(activity, holder, ad) }.also {
         holder.renderedView = it
       }
     }
@@ -807,6 +1096,7 @@ internal class GromoreAdManager(
           ViewGroup.LayoutParams.MATCH_PARENT
         )
       )
+      syncVideo(holder)
       if (!holder.renderEventSent) {
         view.post {
           emitDrawRendered(holder, view.width.toFloat(), view.height.toFloat())
@@ -819,19 +1109,33 @@ internal class GromoreAdManager(
   private fun bindFeedDislikeCallback(activity: Activity, holder: GromoreAdHolder, ad: TTNativeAd) {
     ad.setDislikeCallback(activity, object : TTAdDislike.DislikeInteractionCallback {
       override fun onShow() {
+        if (holder.disposed) return
         emitLog("info", "feed dislike show: ${holder.adId}", "ad")
       }
 
       override fun onSelected(position: Int, value: String?, enforce: Boolean) {
+        if (holder.disposed) return
         emitLog("info", "feed dislike selected: ${holder.adId}", "ad")
+        emitExtra(holder, "dislike", mapOf("reason" to value, "position" to position))
         emitAdClosedOnce(holder, mapOf("dislike" to true, "value" to value))
         holder.container?.removeAllViews()
       }
 
       override fun onCancel() {
+        if (holder.disposed) return
         emitLog("info", "feed dislike cancel: ${holder.adId}", "ad")
       }
     })
+  }
+
+  private fun renderCustom(holder: GromoreAdHolder, activity: Activity, ad: TTFeedAd, fallback: () -> View): View {
+    val id = holder.factoryId ?: return fallback()
+    val factory = GromoreNativeRenderRegistry.factory(id)
+    if (factory == null) {
+      emitAdError(holder.adId, holder.adType, holder.placementId, "factory_not_found", "No native factory: $id")
+      return FrameLayout(activity)
+    }
+    return factory.create(activity, ad, holder.adType)
   }
 
   /** 内置默认自渲染信息流视图 */
@@ -892,7 +1196,7 @@ internal class GromoreAdManager(
     }
 
     ad.setActivityForDownloadApp(activity)
-    bindNativeFeedDownloadListener(ctaView, ad)
+    bindNativeFeedDownloadListener(holder, ctaView, ad)
 
     val clickViews = mutableListOf<View>(root, titleView, descView, sourceView, ctaView)
     val creativeViews = mutableListOf<View>(ctaView)
@@ -921,14 +1225,17 @@ internal class GromoreAdManager(
 
     val interactionListener = object : TTNativeAd.AdInteractionListener {
       override fun onAdClicked(view: View, nativeAd: TTNativeAd) {
+        if (holder.disposed) return
         emitAdClicked(holder)
       }
 
       override fun onAdCreativeClick(view: View, nativeAd: TTNativeAd) {
+        if (holder.disposed) return
         emitAdClicked(holder)
       }
 
       override fun onAdShow(nativeAd: TTNativeAd) {
+        if (holder.disposed) return
         emitAdShownOnce(holder)
       }
     }
@@ -991,7 +1298,7 @@ internal class GromoreAdManager(
     }
 
     ad.setActivityForDownloadApp(activity)
-    bindNativeFeedDownloadListener(ctaView, ad)
+    bindNativeFeedDownloadListener(holder, ctaView, ad)
 
     val clickViews = mutableListOf<View>(root, mediaView, ctaView, titleView, descView)
     val creativeViews = mutableListOf<View>(mediaView, ctaView)
@@ -1001,14 +1308,17 @@ internal class GromoreAdManager(
       creativeViews,
       object : TTNativeAd.AdInteractionListener {
         override fun onAdClicked(view: View, nativeAd: TTNativeAd) {
+          if (holder.disposed) return
           emitAdClicked(holder)
         }
 
         override fun onAdCreativeClick(view: View, nativeAd: TTNativeAd) {
+          if (holder.disposed) return
           emitAdClicked(holder)
         }
 
         override fun onAdShow(nativeAd: TTNativeAd) {
+          if (holder.disposed) return
           emitAdShownOnce(holder)
         }
       }
@@ -1017,30 +1327,42 @@ internal class GromoreAdManager(
   }
 
   /** 原生自渲染下载按钮状态联动 */
-  private fun bindNativeFeedDownloadListener(ctaView: TextView, ad: TTNativeAd) {
+  private fun bindNativeFeedDownloadListener(holder: GromoreAdHolder, ctaView: TextView, ad: TTNativeAd) {
     ad.setDownloadListener(object : TTAppDownloadListener {
       override fun onIdle() {
+        if (holder.disposed) return
+        emitExtra(holder, "downloadChanged", mapOf("state" to "idle"))
         ctaView.post { ctaView.text = ad.buttonText.orEmpty().ifBlank { defaultCallToAction(ad) } }
       }
 
       override fun onDownloadActive(totalBytes: Long, currBytes: Long, fileName: String?, appName: String?) {
+        if (holder.disposed) return
+        emitExtra(holder, "downloadChanged", mapOf("state" to "active", "totalBytes" to totalBytes, "currentBytes" to currBytes))
         val progress = if (totalBytes > 0) ((currBytes * 100) / totalBytes).toInt() else 0
         ctaView.post { ctaView.text = "下载中 $progress%" }
       }
 
       override fun onDownloadPaused(totalBytes: Long, currBytes: Long, fileName: String?, appName: String?) {
+        if (holder.disposed) return
+        emitExtra(holder, "downloadChanged", mapOf("state" to "paused"))
         ctaView.post { ctaView.text = "继续下载" }
       }
 
       override fun onDownloadFailed(totalBytes: Long, currBytes: Long, fileName: String?, appName: String?) {
+        if (holder.disposed) return
+        emitExtra(holder, "downloadChanged", mapOf("state" to "failed"))
         ctaView.post { ctaView.text = "重新下载" }
       }
 
       override fun onDownloadFinished(totalBytes: Long, fileName: String?, appName: String?) {
+        if (holder.disposed) return
+        emitExtra(holder, "downloadChanged", mapOf("state" to "finished"))
         ctaView.post { ctaView.text = "立即安装" }
       }
 
       override fun onInstalled(fileName: String?, appName: String?) {
+        if (holder.disposed) return
+        emitExtra(holder, "downloadChanged", mapOf("state" to "installed"))
         ctaView.post { ctaView.text = "立即打开" }
       }
     })
@@ -1110,8 +1432,10 @@ internal class GromoreAdManager(
 
   /** 广告加载成功事件 */
   private fun emitAdLoaded(holder: GromoreAdHolder) {
+    if (holder.disposed) return
     val ecpm = holder.mediationEcpmInfo()
-    val data = if (ecpm == null) null else mapOf("ecpmInfo" to ecpm)
+    holder.loading = false
+    val data = mapOf("ecpmInfo" to ecpm, "adIds" to holder.batchIds)
     postAdEvent(
       mapOf(
         "adId" to holder.adId,
@@ -1125,6 +1449,7 @@ internal class GromoreAdManager(
 
   /** 广告展示事件 */
   private fun emitAdShown(holder: GromoreAdHolder) {
+    if (holder.disposed) return
     val ecpm = holder.mediationEcpmInfo()
     val data = if (ecpm == null) null else mapOf("ecpmInfo" to ecpm)
     postAdEvent(
@@ -1140,6 +1465,7 @@ internal class GromoreAdManager(
 
   /** 广告展示事件（同一广告实例只上报一次，兼容聚合源重复/缺失回调）。 */
   private fun emitAdShownOnce(holder: GromoreAdHolder) {
+    if (holder.disposed) return
     if (holder.shownEventSent) return
     holder.shownEventSent = true
     emitAdShown(holder)
@@ -1147,6 +1473,7 @@ internal class GromoreAdManager(
 
   /** 广告模板渲染完成事件（返回真实渲染尺寸） */
   private fun emitAdRendered(holder: GromoreAdHolder, width: Float, height: Float) {
+    if (holder.disposed) return
     postAdEvent(
       mapOf(
         "adId" to holder.adId,
@@ -1163,6 +1490,7 @@ internal class GromoreAdManager(
 
   /** 广告点击事件 */
   private fun emitAdClicked(holder: GromoreAdHolder) {
+    if (holder.disposed) return
     postAdEvent(
       mapOf(
         "adId" to holder.adId,
@@ -1175,6 +1503,7 @@ internal class GromoreAdManager(
 
   /** 广告关闭事件 */
   private fun emitAdClosed(holder: GromoreAdHolder, data: Map<String, Any?>? = null) {
+    if (holder.disposed) return
     postAdEvent(
       mapOf(
         "adId" to holder.adId,
@@ -1188,6 +1517,7 @@ internal class GromoreAdManager(
 
   /** 信息流关闭事件去重。 */
   private fun emitAdClosedOnce(holder: GromoreAdHolder, data: Map<String, Any?>? = null) {
+    if (holder.disposed) return
     if (holder.closeEventSent) return
     holder.closeEventSent = true
     emitAdClosed(holder, data)
@@ -1195,19 +1525,22 @@ internal class GromoreAdManager(
 
   /** 激励到账事件 */
   private fun emitAdRewarded(holder: GromoreAdHolder, data: Map<String, Any?>? = null) {
+    if (holder.disposed) return
+    val rewardData = (holder as? RewardAdHolder)?.rewardData.orEmpty() + data.orEmpty().filterValues { it != null }
     postAdEvent(
       mapOf(
         "adId" to holder.adId,
         "adType" to holder.adType,
         "eventType" to "rewarded",
         "placementId" to holder.placementId,
-        "data" to data
+        "data" to rewardData
       )
     )
   }
 
   /** 广告播放完成事件 */
   private fun emitAdCompleted(holder: GromoreAdHolder, data: Map<String, Any?>? = null) {
+    if (holder.disposed) return
     postAdEvent(
       mapOf(
         "adId" to holder.adId,
@@ -1221,6 +1554,7 @@ internal class GromoreAdManager(
 
   /** 广告跳过事件 */
   private fun emitAdSkipped(holder: GromoreAdHolder, data: Map<String, Any?>? = null) {
+    if (holder.disposed) return
     postAdEvent(
       mapOf(
         "adId" to holder.adId,
@@ -1238,7 +1572,8 @@ internal class GromoreAdManager(
     adType: String,
     placementId: String,
     errorCode: String?,
-    errorMessage: String?
+    errorMessage: String?,
+    phase: String? = null
   ) {
     postAdEvent(
       mapOf(
@@ -1247,7 +1582,13 @@ internal class GromoreAdManager(
         "eventType" to "failed",
         "placementId" to placementId,
         "errorCode" to errorCode,
-        "errorMessage" to errorMessage
+        "errorMessage" to errorMessage,
+        "data" to mapOf("phase" to (phase ?: when(errorCode) {
+          "show_failed" -> "show"
+          "video_error" -> "playback"
+          "render_failed" -> "render"
+          else -> "load"
+        }))
       )
     )
   }
@@ -1262,9 +1603,11 @@ internal class GromoreAdManager(
       is FeedAdHolder -> ad?.mediationManager?.showEcpm
       is DrawAdHolder -> ad?.mediationManager?.showEcpm
     }
-    if (info == null) {
-      return null
-    }
+    return ecpmMap(info)
+  }
+
+  private fun ecpmMap(info: MediationAdEcpmInfo?): Map<String, Any?>? {
+    if (info == null) return null
     return mapOf(
       "sdkName" to info.sdkName,
       "customSdkName" to info.customSdkName,
@@ -1289,7 +1632,7 @@ internal class GromoreAdManager(
     if (bundle == null) return emptyMap()
     val map = mutableMapOf<String, Any?>()
     for (key in bundle.keySet()) {
-      map[key] = bundle.get(key)
+      map[key] = codecValue(bundle.get(key))
     }
     return map
   }
@@ -1301,7 +1644,10 @@ internal class GromoreAdManager(
 
   /** 发送广告事件（切到主线程） */
   private fun postAdEvent(payload: Map<String, Any?>) {
+    if (payload["eventType"] == "failed") adHolders[payload["adId"]]?.loading = false
+    val holder = adHolders[payload["adId"]]
     mainHandler.post {
+      if (holder != null && (holder.disposed || adHolders[holder.adId] !== holder)) return@post
       emitAdEvent(payload)
     }
   }
@@ -1340,6 +1686,11 @@ internal class GromoreAdManager(
 
     /** 广告实例是否已销毁 */
     var disposed: Boolean = false
+    var loading = true
+    var videoPaused = false
+    var cachedEventSent = false
+    var batchIds = listOf(adId)
+    var factoryId: String? = null
 
     /** 关闭事件是否已上报 */
     var closeEventSent: Boolean = false
@@ -1348,6 +1699,8 @@ internal class GromoreAdManager(
   /** 开屏广告实例 */
   internal class SplashAdHolder(adId: String, placementId: String) : GromoreAdHolder(adId, placementId) {
     override val adType: String = "splash"
+    var logo: android.graphics.Bitmap? = null
+    var logoHeight = 80
     var ad: CSJSplashAd? = null
     var loadListener: TTAdNative.CSJSplashAdListener? = null
     var showListener: CSJSplashAd.SplashAdListener? = null
@@ -1356,6 +1709,7 @@ internal class GromoreAdManager(
   /** 激励视频广告实例 */
   internal class RewardAdHolder(adId: String, placementId: String) : GromoreAdHolder(adId, placementId) {
     override val adType: String = "rewardVideo"
+    var rewardData: Map<String, Any?> = emptyMap()
     var ad: TTRewardVideoAd? = null
     var loadListener: TTAdNative.RewardVideoAdListener? = null
     var showListener: TTRewardVideoAd.RewardAdInteractionListener? = null

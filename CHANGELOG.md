@@ -1,3 +1,20 @@
+## 2.2.5
+
+- 修复 iOS 信息流渲染事件重复发送及渲染失败阶段标记；Feed/Draw 重新挂载保留手动暂停状态。
+- iOS 开屏仅在展示时锁定竖屏，新增可选的 `iosSplashRestoreOrientations` 恢复宿主方向限制。
+- 同步 podspec 插件版本；最低工具链声明更新为 Flutter 3.22 / Dart 3.4。
+- 加载超时覆盖完整流程；超时后返回的广告会自动释放，避免一直等待。
+- 提前检查广告位、宽高、数量、音量等参数，错误提示更明确。
+- 开屏、激励、插屏、全屏和 Banner 新增 `loadReady()`，减少调用代码。
+- 新增可选的 `GromoreAdController`，统一管理广告、事件监听和资源释放。
+- Feed、Draw 专用视图支持关闭自动视频管理，方便手动控制播放。
+- 视频控制支持 `GromoreVideoAction` 枚举，预缓存支持 `GromorePreloadRequest` 配置；旧字符串和 Map 调用继续可用。
+- 请求宽高默认使用 Flutter 逻辑像素，Android 自动转换；View 默认复用加载尺寸，也支持单独覆盖宽高。
+- 激励 `customData` 支持 Map 和 String；Map 自动转 JSON，String 保持原样。
+- 完善广告回调、状态和收益诊断、原生自渲染、预缓存及运行期配置接口，补齐使用注释。
+- 同步示例和文档，增加超时、参数校验、尺寸复用和资源清理测试，提供可选的真机广告测试入口。
+- 升级注意：Config 中已手动乘 DPR 的宽高请移除转换，或指定 `GromoreAdSizeUnit.nativePixels`；底层 `GromoreAdRequest` 默认仍使用原生单位。SDK 接入及初始化方式不变。
+
 ## 2.2.4
 
 - 修复已知bug。

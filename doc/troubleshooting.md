@@ -20,6 +20,18 @@
 
 修改 Podfile 后重新执行 `pod install`；引入 ADN 后按对应平台补充 `Info.plist` 和 Pod 依赖。
 
+### 模拟器测试启动时报 `TTFFmpeg.framework` 加载失败
+
+运行原生测试时保留 Xcode 默认签名，不要传入 `CODE_SIGNING_ALLOWED=NO`。CocoaPods 会裁剪内嵌 Framework 的架构，需要重新签名才能正常加载。
+
+在 `example/ios` 目录执行，将 `模拟器ID` 替换为本机设备 ID：
+
+```sh
+xcodebuild test -workspace Runner.xcworkspace -scheme Runner \
+  -destination 'platform=iOS Simulator,id=模拟器ID' \
+  -parallel-testing-enabled NO -only-testing:RunnerTests
+```
+
 ## Android 构建问题
 
 确认 Maven 仓库可以访问 `artifact.bytedance.com`。接入 ADN 时，检查 `GM_ADNS` 是否在命令前设置：

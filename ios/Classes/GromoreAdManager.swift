@@ -1,5 +1,6 @@
 import Foundation
 import UIKit
+import AVFoundation
 import BUAdSDK
 import Flutter
 
@@ -11,6 +12,17 @@ final class GromoreAdManager: NSObject {
   private let emitLog: (String, String, String) -> Void
   /// 广告实例缓存
   private var adHolders: [String: GromoreAdHolder]
+  private let notificationCenter: NotificationCenter
+  private var rewardPlaybackObservers: [NSObjectProtocol] = []
+  private var rewardConfirmations: [String: GromoreRewardConfirmation] = [:]
+  private var rewardPlaybackTraces: [String: RewardPlaybackTrace] = [:]
+
+  private struct RewardPlaybackTrace {
+    let startedAt = ProcessInfo.processInfo.systemUptime
+    var completed = false
+    var rewardCallbackReceived = false
+    var rewardVerify: Bool?
+  }
 
   /// 构建广告管理器
   ///
@@ -20,11 +32,101 @@ final class GromoreAdManager: NSObject {
   init(
     emitAdEvent: @escaping ([String: Any]) -> Void,
     emitLog: @escaping (String, String, String) -> Void,
-    adHolders: [String: GromoreAdHolder] = [:]
+    adHolders: [String: GromoreAdHolder] = [:],
+    notificationCenter: NotificationCenter = .default
   ) {
     self.emitAdEvent = emitAdEvent
     self.emitLog = emitLog
     self.adHolders = adHolders
+    self.notificationCenter = notificationCenter
+  }
+
+  deinit {
+    rewardPlaybackObservers.forEach { notificationCenter.removeObserver($0) }
+  }
+
+  // 仅记录 SDK 回调和原生生命周期，不把 Flutter paused 当作播放器暂停，
+  // 也不合成恢复播放、关闭或奖励事件。激励广告没有公开的 pause/resume API。
+  private func traceRewardPlayback(_ adId: String, event: String, details: [String: Any] = [:]) {
+    guard Thread.isMainThread else {
+      DispatchQueue.main.async { [weak self] in
+        self?.traceRewardPlayback(adId, event: event, details: details)
+      }
+      return
+    }
+    guard let holder = adHolders[adId] as? RewardAdHolder else { return }
+    if event == "show_requested" || event == "shown" {
+      if rewardPlaybackTraces[adId] == nil { rewardPlaybackTraces[adId] = RewardPlaybackTrace() }
+      observeRewardPlaybackLifecycle()
+    }
+    guard var trace = rewardPlaybackTraces[adId] else { return }
+    if event == "completed" { trace.completed = true }
+    if event == "rewarded" {
+      trace.rewardCallbackReceived = true
+      trace.rewardVerify = details["verify"] as? Bool
+    }
+    rewardPlaybackTraces[adId] = trace
+    let elapsed = Int((ProcessInfo.processInfo.systemUptime - trace.startedAt) * 1000)
+    // 回调可能先于呈现动画结束，优先读取 show 时记录的广告控制器。
+    let controller = holder.presentedAdController ?? holder.presentationRoot?.presentedViewController
+    let ecpm = buildEcpmInfo(adId: adId) ?? [:]
+    var data: [String: Any] = [
+      "event": event, "adId": adId, "placementId": holder.placementId,
+      "sdkVersion": BUAdSDKManager.sdkVersion, "elapsedMs": elapsed,
+      "applicationState": UIApplication.shared.applicationState.rawValue,
+      "idleTimerDisabled": UIApplication.shared.isIdleTimerDisabled,
+      "videoCompleted": trace.completed, "rewardCallbackReceived": trace.rewardCallbackReceived,
+      "presentedController": controller.map { NSStringFromClass(type(of: $0)) } ?? "none"
+    ]
+    data["rewardVerify"] = trace.rewardVerify
+    for key in ["sdkName", "slotId", "requestId", "creativeId"] {
+      if let value = ecpm[key] as? String { data[key] = value }
+    }
+    if let view = controller?.viewIfLoaded {
+      data["viewBounds"] = NSCoder.string(for: view.bounds)
+      data["windowBounds"] = view.window.map { NSCoder.string(for: $0.bounds) } ?? "none"
+      data["sceneState"] = view.window?.windowScene?.activationState.rawValue
+    }
+    // 只记录诊断字段，不写入 userId/customData/交易号。
+    for key in ["interruptionType", "interruptionOptions", "errorCode"] {
+      data[key] = details[key]
+    }
+    if let json = try? JSONSerialization.data(withJSONObject: data, options: [.sortedKeys]),
+       let message = String(data: json, encoding: .utf8) {
+      emitLog("info", "reward playback: \(message)", "ad")
+    }
+    if event == "closed" || event == "disposed" || event == "show_failed" {
+      rewardPlaybackTraces.removeValue(forKey: adId)
+      if rewardPlaybackTraces.isEmpty {
+        rewardPlaybackObservers.forEach { notificationCenter.removeObserver($0) }
+        rewardPlaybackObservers.removeAll()
+      }
+    }
+  }
+
+  private func observeRewardPlaybackLifecycle() {
+    guard rewardPlaybackObservers.isEmpty else { return }
+    let notifications: [(Notification.Name, String)] = [
+      (UIApplication.willResignActiveNotification, "app_will_resign_active"),
+      (UIApplication.didEnterBackgroundNotification, "app_did_enter_background"),
+      (UIApplication.willEnterForegroundNotification, "app_will_enter_foreground"),
+      (UIApplication.didBecomeActiveNotification, "app_did_become_active"),
+      (UIScene.willDeactivateNotification, "scene_will_deactivate"),
+      (UIScene.didActivateNotification, "scene_did_activate"),
+      (AVAudioSession.interruptionNotification, "audio_interruption")
+    ]
+    rewardPlaybackObservers = notifications.map { name, event in
+      notificationCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] notification in
+        guard let self else { return }
+        let details: [String: Any] = [
+          "interruptionType": notification.userInfo?[AVAudioSessionInterruptionTypeKey] ?? NSNull(),
+          "interruptionOptions": notification.userInfo?[AVAudioSessionInterruptionOptionKey] ?? NSNull()
+        ]
+        for id in Array(self.rewardPlaybackTraces.keys) {
+          self.traceRewardPlayback(id, event: event, details: details)
+        }
+      }
+    }
   }
 
   /// 生成新的广告实例 ID
@@ -193,6 +295,7 @@ final class GromoreAdManager: NSObject {
 
   private func emitExtra(_ id: String, _ event: String, _ data: [String: Any] = [:]) {
     guard let holder = adHolders[id] else { return }
+    traceRewardPlayback(id, event: event)
     postAdEvent(["adId": id, "adType": holder.adType, "placementId": holder.placementId,
       "eventType": event, "data": data])
   }
@@ -262,58 +365,108 @@ final class GromoreAdManager: NSObject {
     }
   }
 
+  /// 调用方仅在自己的服务端确认到账后请求；插件只负责原生交互。
+  func showRewardConfirmation(args: [String: Any], completion: @escaping (Bool) -> Void) throws {
+    guard let id = args["adId"] as? String,
+          let title = args["title"] as? String, !title.isEmpty,
+          let message = args["message"] as? String, !message.isEmpty,
+          let cancelLabel = args["cancelLabel"] as? String, !cancelLabel.isEmpty,
+          let confirmLabel = args["confirmLabel"] as? String, !confirmLabel.isEmpty else {
+      throw GromoreAdFailure(code: "invalid_args", message: "Reward confirmation text and adId required")
+    }
+    guard let holder = try requireHolder(id) as? RewardAdHolder, !holder.closed else {
+      throw GromoreAdFailure(code: "not_ready", message: "Reward ad is not presenting")
+    }
+    guard rewardConfirmations[id] == nil else {
+      throw GromoreAdFailure(code: "confirmation_active", message: "Reward confirmation already pending")
+    }
+    let prompt = GromoreRewardConfirmation(title: title, message: message,
+      cancelLabel: cancelLabel, confirmLabel: confirmLabel,
+      controller: { [weak holder] in holder?.presentedAdController },
+      isValid: { [weak self, weak holder] in
+        guard let self, let holder else { return false }
+        return self.adHolders[id] === holder && !holder.closed
+      }, result: { [weak self] accepted in
+        self?.rewardConfirmations.removeValue(forKey: id)
+        completion(accepted)
+      })
+    rewardConfirmations[id] = prompt
+    prompt.present()
+  }
+
   /// 销毁广告
   ///
   /// - Parameter adId: 广告实例 ID
-  func disposeAd(adId: String) {
-    guard let holder = adHolders.removeValue(forKey: adId) else { return }
-    switch holder {
-    case let splash as SplashAdHolder:
-      splash.splashAd?.delegate = nil
-      splash.splashAd?.mediation?.destoryAd()
-      splash.splashAd = nil
-    case let reward as RewardAdHolder:
-      reward.rewardedAd?.delegate = nil
-      reward.rewardedAd?.rewardPlayAgainInteractionDelegate = nil
-      dismissAdPresentation(holder)
-      reward.rewardedAd = nil
-    case let full as FullScreenAdHolder:
-      full.fullscreenAd?.delegate = nil
-      dismissAdPresentation(holder)
-      full.fullscreenAd = nil
-    case let banner as BannerAdHolder:
-      banner.bannerView?.delegate = nil
-      banner.bannerView?.mediation?.destory()
-      banner.bannerView?.removeFromSuperview()
-      banner.bannerView = nil
-    case let feed as FeedAdHolder:
-      feed.nativeAd?.delegate = nil
-      performFeedVideoAction(feed, action: "stop")
-      feed.nativeAd?.unregisterView()
-      feed.nativeAd?.mediation?.canvasView.removeFromSuperview()
-      if !adHolders.values.contains(where: { ($0 as? FeedAdHolder)?.adsManager === feed.adsManager }) {
-        feed.adsManager?.mediation?.destory()
+  func disposeAd(adId: String, completion: @escaping () -> Void = {}) {
+    traceRewardPlayback(adId, event: "disposed")
+    guard let holder = adHolders.removeValue(forKey: adId) else { completion(); return }
+    // SDK close/skip 回调不保证 UIKit 转场已完成。持有 SDK 实例到转场结束，
+    // 再释放并通知 Flutter，避免上层 Alert 在广告遮罩尚在时出现。
+    let dismiss = {
+      self.dismissAdPresentation(holder) {
+        switch holder {
+        case let splash as SplashAdHolder:
+          splash.splashAd?.delegate = nil
+          splash.splashAd?.mediation?.destoryAd()
+          splash.splashAd = nil
+        case let reward as RewardAdHolder:
+          reward.rewardedAd?.delegate = nil
+          reward.rewardedAd?.rewardPlayAgainInteractionDelegate = nil
+          reward.rewardedAd = nil
+        case let full as FullScreenAdHolder:
+          full.fullscreenAd?.delegate = nil
+          full.fullscreenAd = nil
+        case let banner as BannerAdHolder:
+          banner.bannerView?.delegate = nil
+          banner.bannerView?.mediation?.destory()
+          banner.bannerView?.removeFromSuperview()
+          banner.bannerView = nil
+        case let feed as FeedAdHolder:
+          feed.nativeAd?.delegate = nil
+          self.performFeedVideoAction(feed, action: "stop")
+          feed.nativeAd?.unregisterView()
+          feed.nativeAd?.mediation?.canvasView.removeFromSuperview()
+          if !self.adHolders.values.contains(where: { ($0 as? FeedAdHolder)?.adsManager === feed.adsManager }) {
+            feed.adsManager?.mediation?.destory()
+          }
+          feed.nativeAd = nil
+          feed.adsManager = nil
+        default:
+          break
+        }
+        holder.container?.subviews.forEach { $0.removeFromSuperview() }
+        holder.container = nil
+        self.emitLog("info", "disposeAd: \(adId)", "ad")
+        completion()
       }
-      feed.nativeAd = nil
-      feed.adsManager = nil
-    default:
-      break
     }
-    holder.container?.subviews.forEach { $0.removeFromSuperview() }
-    holder.container = nil
-    emitLog("info", "disposeAd: \(adId)", "ad")
+    if let prompt = rewardConfirmations[adId] { prompt.cancel(completion: dismiss) }
+    else { dismiss() }
   }
 
-  private func dismissAdPresentation(_ holder: GromoreAdHolder) {
-    // 只关闭 show 时记录的广告控制器，避免误关宿主页面。
-    if let controller = holder.presentedAdController,
-       let presenter = controller.presentingViewController,
-       presenter.presentedViewController === controller,
-       !controller.isBeingDismissed {
-      controller.dismiss(animated: false)
+  private func dismissAdPresentation(_ holder: GromoreAdHolder, completion: @escaping () -> Void) {
+    // 脱离 SDK delegate 的同步调用栈；只操作本次展示记录的广告控制器。
+    DispatchQueue.main.async {
+      self.completeAdDismissal(holder, completion: completion)
     }
-    holder.presentedAdController = nil
-    holder.presentationRoot = nil
+  }
+
+  private func completeAdDismissal(_ holder: GromoreAdHolder, completion: @escaping () -> Void) {
+    guard let controller = holder.presentedAdController else { completion(); return }
+    let finish = {
+      holder.presentedAdController = nil
+      holder.presentationRoot = nil
+      completion()
+    }
+    if (controller.isBeingDismissed || controller.isBeingPresented),
+       let transition = controller.transitionCoordinator {
+      if transition.animate(alongsideTransition: nil, completion: { _ in
+        self.completeAdDismissal(holder, completion: completion)
+      }) { return }
+    }
+    guard let presenter = controller.presentingViewController,
+          presenter.presentedViewController === controller else { finish(); return }
+    controller.dismiss(animated: false, completion: finish)
   }
 
   /// 清理全部广告实例
@@ -635,6 +788,7 @@ final class GromoreAdManager: NSObject {
       try failShow(holder, code: "no_root_view_controller", message: "No view controller")
     }
     holder.presentationRoot = rootVC
+    traceRewardPlayback(holder.adId, event: "show_requested")
     if !ad.show(fromRootViewController: rootVC) {
       try failShow(holder, code: "show_failed", message: "SDK rejected show")
     }
@@ -957,6 +1111,7 @@ final class GromoreAdManager: NSObject {
     if let holder = adHolders[adId], holder.presentedAdController == nil {
       holder.presentedAdController = holder.presentationRoot?.presentedViewController
     }
+    traceRewardPlayback(adId, event: "shown")
     var payload: [String: Any] = [
       "adId": adId,
       "adType": adType,
@@ -987,6 +1142,7 @@ final class GromoreAdManager: NSObject {
   }
 
   private func emitAdClicked(adId: String, adType: String, placementId: String) {
+    traceRewardPlayback(adId, event: "clicked")
     postAdEvent([
       "adId": adId,
       "adType": adType,
@@ -996,6 +1152,9 @@ final class GromoreAdManager: NSObject {
   }
 
   private func emitAdClosed(adId: String, adType: String, placementId: String, data: [String: Any]? = nil) {
+    traceRewardPlayback(adId, event: "closed")
+    (adHolders[adId] as? RewardAdHolder)?.closed = true
+    rewardConfirmations[adId]?.cancel()
     var payload: [String: Any] = [
       "adId": adId,
       "adType": adType,
@@ -1007,6 +1166,7 @@ final class GromoreAdManager: NSObject {
   }
 
   private func emitAdRewarded(adId: String, adType: String, placementId: String, data: [String: Any]? = nil) {
+    traceRewardPlayback(adId, event: "rewarded", details: data ?? [:])
     var payload: [String: Any] = [
       "adId": adId,
       "adType": adType,
@@ -1017,10 +1177,13 @@ final class GromoreAdManager: NSObject {
     postAdEvent(payload)
   }
 
-  private func emitAdError(adId: String, adType: String, placementId: String, errorCode: String?, errorMessage: String?, phase: String? = nil) {
+  private func emitAdError(adId: String, adType: String, placementId: String, errorCode: String?, errorMessage: String?, phase: String? = nil, nativeError: Error? = nil, splashErrorCode: Int? = nil) {
     let resolvedPhase = phase ?? (["show_failed": "show", "video_error": "playback",
       "render_failed": "render", "reward_verify_failed": "rewardVerification"][errorCode ?? ""] ?? "load")
+    traceRewardPlayback(adId, event: resolvedPhase == "show" ? "show_failed" : "failed",
+      details: ["errorCode": errorCode ?? "unknown"])
     var data: [String: Any] = ["phase": resolvedPhase]
+    data.merge(GromoreErrorDiagnostics.fields(error: nativeError, splashErrorCode: splashErrorCode)) { _, new in new }
     if resolvedPhase == "load", let holder = adHolders[adId] {
       // 同一轮加载可能收到多次失败回调，只通知一次；成功加载后允许下一轮失败。
       guard !holder.loadFailureSent else { return }
@@ -1361,6 +1524,7 @@ final class GromoreAdManager: NSObject {
 
   /// 激励视频广告实例
   final class RewardAdHolder: GromoreAdHolder {
+    var closed = false
     var rewardedAd: BUNativeExpressRewardedVideoAd?
     var delegate: RewardDelegate?
 
@@ -1428,7 +1592,7 @@ final class GromoreAdManager: NSObject {
       let code = error?.errorCode.rawValue ?? error?._code ?? 0
       let message = error?.localizedDescription
       manager?.emitLog("error", "splash load fail: \(adId), code=\(code)", "ad")
-      manager?.emitAdError(adId: adId, adType: "splash", placementId: placementId, errorCode: "\(code)", errorMessage: message)
+      manager?.emitAdError(adId: adId, adType: "splash", placementId: placementId, errorCode: "\(code)", errorMessage: message, nativeError: error, splashErrorCode: error?.errorCode.rawValue)
     }
 
     func splashAdRenderSuccess(_ splashAd: BUSplashAd) {
@@ -1440,7 +1604,7 @@ final class GromoreAdManager: NSObject {
       guard manager?.adHolders[adId] != nil else { return }
       let code = error?.errorCode.rawValue ?? error?._code ?? 0
       manager?.emitLog("error", "splash render fail: \(adId), code=\(code)", "ad")
-      manager?.emitAdError(adId: adId, adType: "splash", placementId: placementId, errorCode: "\(code)", errorMessage: error?.localizedDescription)
+      manager?.emitAdError(adId: adId, adType: "splash", placementId: placementId, errorCode: "\(code)", errorMessage: error?.localizedDescription, phase: "render", nativeError: error, splashErrorCode: error?.errorCode.rawValue)
     }
 
     func splashAdWillShow(_ splashAd: BUSplashAd) {
@@ -1488,7 +1652,7 @@ final class GromoreAdManager: NSObject {
     func splashVideoAdDidPlayFinish(_ splashAd: BUSplashAd, didFailWithError error: Error?) {
       guard manager?.adHolders[adId] != nil else { return }
       if let error = error {
-        manager?.emitAdError(adId: adId, adType: "splash", placementId: placementId, errorCode: "\(error._code)", errorMessage: error.localizedDescription)
+        manager?.emitAdError(adId: adId, adType: "splash", placementId: placementId, errorCode: "\(error._code)", errorMessage: error.localizedDescription, phase: "playback", nativeError: error)
       } else {
         manager?.emitLog("info", "splash video play finished: \(adId)", "ad")
       }
@@ -1496,7 +1660,7 @@ final class GromoreAdManager: NSObject {
 
     func splashAdDidShowFailed(_ splashAd: BUSplashAd, error: Error) {
       guard manager?.adHolders[adId] != nil else { return }
-      manager?.emitAdError(adId: adId, adType: "splash", placementId: placementId, errorCode: "show_failed", errorMessage: error.localizedDescription)
+      manager?.emitAdError(adId: adId, adType: "splash", placementId: placementId, errorCode: "show_failed", errorMessage: error.localizedDescription, nativeError: error)
     }
 
     func splashCardReady(toShow splashAd: BUSplashAd) {
@@ -1539,7 +1703,7 @@ final class GromoreAdManager: NSObject {
       guard manager?.adHolders[adId] != nil else { return }
       if let error = error {
         manager?.emitAdError(adId: adId, adType: "rewardVideo", placementId: placementId,
-          errorCode: "video_error", errorMessage: error.localizedDescription)
+          errorCode: "video_error", errorMessage: error.localizedDescription, nativeError: error)
       } else { manager?.emitExtra(adId, "completed") }
     }
     func nativeExpressRewardedVideoAdWillPresentFullScreenModal(_ ad: BUNativeExpressRewardedVideoAd) {
@@ -1557,7 +1721,7 @@ final class GromoreAdManager: NSObject {
     func nativeExpressRewardedVideoAdViewRenderFail(_ ad: BUNativeExpressRewardedVideoAd, error: Error?) {
       guard manager?.adHolders[adId] != nil else { return }
       manager?.emitAdError(adId: adId, adType: "rewardVideo", placementId: placementId,
-        errorCode: "render_failed", errorMessage: error?.localizedDescription)
+        errorCode: "render_failed", errorMessage: error?.localizedDescription, nativeError: error)
     }
 
     func nativeExpressRewardedVideoAdDidLoad(_ rewardedVideoAd: BUNativeExpressRewardedVideoAd) {
@@ -1567,7 +1731,7 @@ final class GromoreAdManager: NSObject {
 
     func nativeExpressRewardedVideoAd(_ rewardedVideoAd: BUNativeExpressRewardedVideoAd, didFailWithError error: Error?) {
       guard manager?.adHolders[adId] != nil else { return }
-      manager?.emitAdError(adId: adId, adType: "rewardVideo", placementId: placementId, errorCode: "\(error?._code ?? 0)", errorMessage: error?.localizedDescription)
+      manager?.emitAdError(adId: adId, adType: "rewardVideo", placementId: placementId, errorCode: "\(error?._code ?? 0)", errorMessage: error?.localizedDescription, nativeError: error)
     }
 
     func nativeExpressRewardedVideoAdDidVisible(_ rewardedVideoAd: BUNativeExpressRewardedVideoAd) {
@@ -1592,7 +1756,7 @@ final class GromoreAdManager: NSObject {
     ///   - error: 失败原因
     func nativeExpressRewardedVideoAdDidShowFailed(_ rewardedVideoAd: BUNativeExpressRewardedVideoAd, error: Error) {
       guard manager?.adHolders[adId] != nil else { return }
-      manager?.emitAdError(adId: adId, adType: "rewardVideo", placementId: placementId, errorCode: "show_failed", errorMessage: error.localizedDescription)
+      manager?.emitAdError(adId: adId, adType: "rewardVideo", placementId: placementId, errorCode: "show_failed", errorMessage: error.localizedDescription, nativeError: error)
     }
 
     func nativeExpressRewardedVideoAdServerRewardDidSucceed(_ rewardedVideoAd: BUNativeExpressRewardedVideoAd, verify: Bool) {
@@ -1614,7 +1778,7 @@ final class GromoreAdManager: NSObject {
 
     func nativeExpressRewardedVideoAdServerRewardDidFail(_ rewardedVideoAd: BUNativeExpressRewardedVideoAd, error: Error?) {
       guard manager?.adHolders[adId] != nil else { return }
-      manager?.emitAdError(adId: adId, adType: "rewardVideo", placementId: placementId, errorCode: "reward_verify_failed", errorMessage: error?.localizedDescription)
+      manager?.emitAdError(adId: adId, adType: "rewardVideo", placementId: placementId, errorCode: "reward_verify_failed", errorMessage: error?.localizedDescription, nativeError: error)
     }
   }
 

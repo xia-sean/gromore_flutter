@@ -222,6 +222,42 @@ extra = {"orderId":"order_456"}
 `onRewarded` 只是客户端事件。真正发放奖励时，请由服务器验签并按 `trans_id` 去重。
 不要在 GroMore 和广告来源后台重复配置两套奖励发放回调。
 
+### 在广告上方提示业务奖励到账
+
+此提示为可选能力，默认不会弹出，只有业务方显式调用 `showRewardConfirmation` 才会显示。
+
+收到 `onRewarded` 后先查询自己的业务服务端，确认到账且账号、广告实例仍有效，再调用原生提示；客户端 `rewardVerify` 不能替代业务查询。
+
+```dart
+final accepted = await GromoreFlutter.instance.invokeNative(
+  'showRewardConfirmation',
+  {
+    'adId': adId,
+    'title': '奖励已收到',
+    'message': '导出次数已到账，点击确定可关闭广告继续导出。',
+    'cancelLabel': '取消',
+    'confirmLabel': '确定',
+  },
+);
+if (accepted == true) {
+  await GromoreFlutter.instance.disposeAd(adId);
+  // 原生退出完成后才继续导出等后续业务。
+}
+```
+
+返回 `false` 只表示取消提示或广告已失效，不关闭广告。调用方每个广告只发起一次提示；等待主动退出确认期间不要让提前到达的 `onClosed`/`onSkipped` 抢先继续业务。
+原生提示不发放奖励。广告自然关闭/释放会撤销提示；iOS 在广告呈现链上显示，后台/已有 Alert 或转场期间等待；Android 只绑定本次 show 创建的已识别 SDK Activity，未知广告来源保留自然关闭，不能猜测并关闭宿主页面。
+
+### iOS 倒计时停住或广告无法关闭时如何排查？
+
+`onCompleted`、`onRewarded` 和 `onClosed` 分别表示播放完成、客户端奖励回调和广告关闭，三者不能互相替代。
+收到奖励回调时保留 SDK 原始 `rewardVerify` 值，实际到账以服务端为准。Flutter 的 `inactive/hidden/paused` 也不等同于广告播放器暂停。
+
+初始化时设置 `GromoreConfig(enableLog: true, enableLogToFile: true, ...)`，复现后通过
+`GromoreFlutter.instance.exportLogFile()` 导出日志。iOS 原生日志中的 `reward playback:` 会记录广告源、广告源代码位、
+请求/素材 ID、SDK 版本、经过时间、原生前后台变化、音频中断、播放完成/奖励/关闭回调和广告控制器尺寸。
+这些日志用于定位问题，不代表 SDK 提供了倒计时进度或暂停状态。若倒计时到 0 后仍无关闭入口，请保留该日志及录屏核对对应广告源和素材。
+
 ### extra、androidExtra、iosExtra 怎么选？
 
 **通常不用填它们，直接使用 `userId`、`customData`、`muted` 等字段即可。**

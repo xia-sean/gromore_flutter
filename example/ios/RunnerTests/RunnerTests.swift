@@ -2,6 +2,7 @@ import Flutter
 import UIKit
 import XCTest
 import BUAdSDK
+import AVFoundation
 
 
 @testable import gromore_flutter
@@ -14,6 +15,135 @@ private class VideoActionTarget: NSObject {
 }
 
 class RunnerTests: XCTestCase {
+  func testRewardConfirmationCancelAndAcceptDismissOnlyTheAlert() {
+    for accepted in [false, true] {
+      let root = UIViewController()
+      let window = UIWindow(frame: UIScreen.main.bounds)
+      window.rootViewController = root
+      window.makeKeyAndVisible()
+      let ad = UIViewController()
+      let shown = expectation(description: "ad shown")
+      root.present(ad, animated: false) { shown.fulfill() }
+      wait(for: [shown], timeout: 2)
+      var results: [Bool] = []
+      let answered = expectation(description: "alert dismissed before answer")
+      let prompt = GromoreRewardConfirmation(title: "奖励已收到", message: "导出次数已到账",
+        cancelLabel: "取消", confirmLabel: "确定", controller: { ad }, isValid: { true },
+        isForeground: { true }) { value in
+          results.append(value)
+          XCTAssertNil(ad.presentedViewController)
+          XCTAssertTrue(root.presentedViewController === ad)
+          answered.fulfill()
+        }
+      prompt.present()
+      let alertShown = XCTNSPredicateExpectation(predicate: NSPredicate { _, _ in
+        ad.presentedViewController is UIAlertController && !ad.presentedViewController!.isBeingPresented
+      }, object: nil)
+      wait(for: [alertShown], timeout: 2)
+      XCTAssertTrue(prompt.alert?.presentingViewController === ad)
+      XCTAssertEqual(prompt.alert?.actions.map { $0.title ?? "" }, ["取消", "确定"])
+      prompt.choose(confirmed: accepted)
+      wait(for: [answered], timeout: 2)
+      prompt.cancel()
+      XCTAssertEqual(results, [accepted], "通道结果只完成一次")
+      root.dismiss(animated: false)
+      window.isHidden = true
+    }
+  }
+
+  func testRewardConfirmationWaitsForForegroundAndCancelsStaleRequest() {
+    var foreground = false
+    var valid = true
+    let answered = expectation(description: "stale confirmation cancelled")
+    let prompt = GromoreRewardConfirmation(title: "Reward", message: "Credited",
+      cancelLabel: "Cancel", confirmLabel: "OK", controller: { nil }, isValid: { valid },
+      isForeground: { foreground }) { accepted in
+        XCTAssertFalse(accepted)
+        answered.fulfill()
+      }
+    prompt.present()
+    XCTAssertNil(prompt.alert?.presentingViewController)
+    foreground = true
+    valid = false
+    prompt.present()
+    wait(for: [answered], timeout: 2)
+    XCTAssertNil(prompt.alert)
+  }
+
+  func testDisposingRewardCancelsQueuedConfirmationAndRejectsDuplicates() throws {
+    let holder = GromoreAdManager.RewardAdHolder(adId: "reward", placementId: "slot")
+    let manager = GromoreAdManager(emitAdEvent: { _ in }, emitLog: { _, _, _ in },
+      adHolders: ["reward": holder])
+    let args = ["adId": "reward", "title": "Reward", "message": "Credited",
+      "cancelLabel": "Cancel", "confirmLabel": "OK"]
+    let answered = expectation(description: "confirmation cancelled")
+    try manager.showRewardConfirmation(args: args) { accepted in
+      XCTAssertFalse(accepted)
+      answered.fulfill()
+    }
+    XCTAssertThrowsError(try manager.showRewardConfirmation(args: args) { _ in })
+    let disposed = expectation(description: "dispose completed after cancellation")
+    manager.disposeAd(adId: "reward") { disposed.fulfill() }
+    wait(for: [answered, disposed], timeout: 2)
+    XCTAssertThrowsError(try manager.showRewardConfirmation(args: args) { _ in })
+  }
+
+  func testRewardPlaybackTraceKeepsCompletionRewardAndCloseSeparate() throws {
+    let center = NotificationCenter()
+    let holder = GromoreAdManager.RewardAdHolder(adId: "reward", placementId: "placement")
+    var events: [[String: Any]] = []
+    var logs: [[String: Any]] = []
+    let manager = GromoreAdManager(emitAdEvent: { events.append($0) }, emitLog: { _, message, _ in
+      let prefix = "reward playback: "
+      guard message.hasPrefix(prefix),
+            let data = String(message.dropFirst(prefix.count)).data(using: .utf8),
+            let log = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else { return }
+      logs.append(log)
+    }, adHolders: ["reward": holder], notificationCenter: center)
+    let delegate = GromoreAdManager.RewardDelegate(manager: manager, adId: "reward", placementId: "placement")
+    let ad = BUNativeExpressRewardedVideoAd(slotID: "placement", rewardedVideoModel: BURewardedVideoModel())
+    delegate.nativeExpressRewardedVideoAdDidVisible(ad)
+    delegate.nativeExpressRewardedVideoAdDidPlayFinish(ad, didFailWithError: nil)
+    delegate.nativeExpressRewardedVideoAdServerRewardDidSucceed(ad, verify: false)
+    center.post(name: UIApplication.willResignActiveNotification, object: nil)
+    center.post(name: AVAudioSession.interruptionNotification, object: nil, userInfo: [
+      AVAudioSessionInterruptionTypeKey: AVAudioSession.InterruptionType.began.rawValue
+    ])
+    let drained = expectation(description: "reward callbacks delivered")
+    DispatchQueue.main.async {
+      XCTAssertEqual(events.compactMap { $0["eventType"] as? String }, ["shown", "completed", "rewarded"])
+      XCTAssertEqual((events.last?["data"] as? [String: Any])?["verify"] as? Bool, false)
+      XCTAssertTrue(logs.contains { $0["event"] as? String == "app_will_resign_active" })
+      let interruption = logs.first { $0["event"] as? String == "audio_interruption" }
+      XCTAssertEqual(interruption?["videoCompleted"] as? Bool, true)
+      XCTAssertEqual(interruption?["rewardCallbackReceived"] as? Bool, true)
+      XCTAssertEqual(interruption?["rewardVerify"] as? Bool, false)
+      XCTAssertEqual(interruption?["interruptionType"] as? UInt, AVAudioSession.InterruptionType.began.rawValue)
+      drained.fulfill()
+    }
+    wait(for: [drained], timeout: 2)
+    delegate.nativeExpressRewardedVideoAdDidClose(ad)
+    let countAfterClose = logs.count
+    center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+    XCTAssertEqual(logs.count, countAfterClose, "关闭后停止监听原生生命周期")
+    manager.disposeAd(adId: "reward")
+  }
+
+  func testDisposingRewardStopsPlaybackTraceObservers() {
+    let center = NotificationCenter()
+    let holder = GromoreAdManager.RewardAdHolder(adId: "reward", placementId: "placement")
+    var logs: [String] = []
+    let manager = GromoreAdManager(emitAdEvent: { _ in }, emitLog: { _, message, _ in logs.append(message) },
+      adHolders: ["reward": holder], notificationCenter: center)
+    let delegate = GromoreAdManager.RewardDelegate(manager: manager, adId: "reward", placementId: "placement")
+    let ad = BUNativeExpressRewardedVideoAd(slotID: "placement", rewardedVideoModel: BURewardedVideoModel())
+    delegate.nativeExpressRewardedVideoAdDidVisible(ad)
+    manager.disposeAd(adId: "reward")
+    let countAfterDispose = logs.count
+    center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+    XCTAssertEqual(logs.count, countAfterDispose)
+  }
+
   func testDisposeDismissesOnlyRecordedAdPresentation() throws {
     let root = UIViewController()
     let window = UIWindow(frame: UIScreen.main.bounds)

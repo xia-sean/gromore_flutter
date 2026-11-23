@@ -17,6 +17,8 @@
 
 邮箱📬 [xm_sean@163.com](mailto:xm_sean@163.com)
 
+如果喜欢，请帮忙点击右上角like以鼓励作者。
+
 </div>
 
 > 中文：本仓库为源码可见项目。允许 fork 仅用于评估、测试、修复问题并通过 Pull Request 回馈主仓库；不允许将本项目或修改版本重新发布为独立插件、SDK、package 或竞品。详见 [LICENSE](../LICENSE)、[LICENSE.zh-CN.md](../LICENSE.zh-CN.md) 与 [CONTRIBUTING.md](../CONTRIBUTING.md)。
@@ -48,13 +50,13 @@
 
 ## ⚡ 5 分钟接入
 
-当前插件版本：`2.2.6`；内置 Android GroMore `7.8.1.4`、iOS Ads-CN-Beta `7.8.0.5`。
+当前插件版本：`2.2.7`；内置 Android GroMore `7.8.1.4`、iOS Ads-CN-Beta `7.8.0.5`。
 
 ### 1. 添加依赖
 
 ```yaml
 dependencies:
-  gromore_flutter: ^2.2.6
+  gromore_flutter: ^2.2.7
 ```
 
 执行：

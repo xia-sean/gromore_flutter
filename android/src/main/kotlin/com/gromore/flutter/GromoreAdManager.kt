@@ -237,8 +237,8 @@ internal class GromoreAdManager(
    *
    * @param adId 广告实例 ID
    */
-  fun disposeAd(adId: String) {
-    val holder = adHolders.remove(adId) ?: return
+  fun disposeAd(adId: String, completion: () -> Unit = {}) {
+    val holder = adHolders.remove(adId) ?: run { completion(); return }
     holder.disposed = true
     when (holder) {
       is SplashAdHolder -> {
@@ -254,6 +254,17 @@ internal class GromoreAdManager(
     }
     holder.container?.removeAllViews()
     emitLog("info", "disposeAd: $adId", "ad")
+    val presentation = (holder as? RewardAdHolder)?.presentation
+    if (presentation != null) presentation.closeActivities(completion) else completion()
+  }
+
+  fun showRewardConfirmation(options: Map<*, *>, completion: (Boolean) -> Unit) {
+    val id = options["adId"] as? String ?: throw GromoreAdException("invalid_args", "adId required")
+    val holder = adHolders[id] as? RewardAdHolder
+      ?: throw GromoreAdException("ad_not_found", "Reward ad not found")
+    val presentation = holder.presentation
+      ?: throw GromoreAdException("not_ready", "Reward ad is not presenting")
+    presentation.showConfirmation(options, completion)
   }
 
   /**
@@ -591,6 +602,9 @@ internal class GromoreAdManager(
     }
     holder.showListener = interactionListener
     ad.setRewardAdInteractionListener(interactionListener)
+    holder.presentation = GromoreRewardPresentation(activity, mainHandler, valid = {
+      adHolders[holder.adId] === holder && !holder.disposed && !holder.closeEventSent
+    })
     ad.showRewardVideoAd(activity)
   }
 
@@ -1503,6 +1517,8 @@ internal class GromoreAdManager(
 
   /** 广告关闭事件 */
   private fun emitAdClosed(holder: GromoreAdHolder, data: Map<String, Any?>? = null) {
+    (holder as? RewardAdHolder)?.presentation?.cancelConfirmation()
+    holder.closeEventSent = true
     if (holder.disposed) return
     postAdEvent(
       mapOf(
@@ -1709,6 +1725,7 @@ internal class GromoreAdManager(
   /** 激励视频广告实例 */
   internal class RewardAdHolder(adId: String, placementId: String) : GromoreAdHolder(adId, placementId) {
     override val adType: String = "rewardVideo"
+    var presentation: GromoreRewardPresentation? = null
     var rewardData: Map<String, Any?> = emptyMap()
     var ad: TTRewardVideoAd? = null
     var loadListener: TTAdNative.RewardVideoAdListener? = null

@@ -141,7 +141,7 @@ class GromoreAdController {
       try {
         await GromoreFlutter.instance
             .disposeAd(id)
-            .timeout(const Duration(seconds: 1));
+            .timeout(const Duration(seconds: 3));
       } catch (_) {/* 清理尽力完成，不覆盖原始加载/展示错误。 */}
     }));
   }

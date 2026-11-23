@@ -293,8 +293,8 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
       result(FlutterError(code: "invalid_args", message: "adId is missing.", details: nil))
       return
     }
-    adManager?.disposeAd(adId: adId ?? "")
-    result(nil)
+    guard let manager = adManager else { result(nil); return }
+    manager.disposeAd(adId: adId ?? "") { result(nil) }
   }
 
   /// 调用原生自定义方法（平台透传兜底）
@@ -313,6 +313,11 @@ public class GromoreFlutterPlugin: NSObject, FlutterPlugin {
         throw GromoreAdFailure(code: "not_ready", message: "Ad manager unavailable")
       }
       result(try manager.operation(method, args: args))
+    case "showRewardConfirmation":
+      guard let manager = adManager else {
+        throw GromoreAdFailure(code: "not_ready", message: "Ad manager unavailable")
+      }
+      try manager.showRewardConfirmation(args: args) { result($0) }
     case "getSdkInfo":
       result(["version": BUAdSDKManager.sdkVersion, "isReady": BUAdSDKManager.state == .start,
         "isInitialized": BUAdSDKManager.state == .start])

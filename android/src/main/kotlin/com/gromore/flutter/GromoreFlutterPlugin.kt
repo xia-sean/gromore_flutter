@@ -312,8 +312,9 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
       result.error("invalid_args", "adId is missing.", null)
       return
     }
-    adManager?.disposeAd(adId)
-    result.success(null)
+    val manager = adManager
+    if (manager == null) result.success(null)
+    else manager.disposeAd(adId) { result.success(null) }
   }
 
   /**
@@ -331,6 +332,10 @@ class GromoreFlutterPlugin : FlutterPlugin, MethodCallHandler, ActivityAware {
       "getAdIds", "getAdState", "getAdDiagnostics", "controlVideo", "showSplashCard", "hideSplashSkipButton" -> {
         val manager = adManager ?: throw GromoreAdException("not_ready", "Ad manager is unavailable")
         result.success(manager.operation(method, options))
+      }
+      "showRewardConfirmation" -> {
+        val manager = adManager ?: throw GromoreAdException("not_ready", "Ad manager unavailable")
+        manager.showRewardConfirmation(options) { result.success(it) }
       }
       "getSdkInfo" -> result.success(mapOf("version" to TTAdSdk.SDK_VERSION_NAME,
         "isReady" to TTAdSdk.isSdkReady(), "isInitialized" to TTAdSdk.isInitSuccess()))
